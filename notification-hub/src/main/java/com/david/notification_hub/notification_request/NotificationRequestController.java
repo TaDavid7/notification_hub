@@ -10,9 +10,11 @@ import java.util.Optional;
 @RequestMapping("/notifications")
 public class NotificationRequestController{
     private final NotificationRequestRepository repo;
+    private final NotificationService service;
 
-    public NotificationRequestController(NotificationRequestRepository repo){
+    public NotificationRequestController(NotificationRequestRepository repo, NotificationService service){
         this.repo = repo;
+        this.service = service;
     }
 
     //dto
@@ -36,6 +38,7 @@ public class NotificationRequestController{
         }
 
         NotificationRequest saved = repo.save(r);
+        service.process(saved);
         return ResponseEntity.created(URI.create("/notifications/" + saved.getId())).body(saved);
     }
     @GetMapping("/{id}")

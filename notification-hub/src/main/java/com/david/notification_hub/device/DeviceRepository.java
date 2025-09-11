@@ -2,4 +2,8 @@ package com.david.notification_hub.device;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface DeviceRepository extends JpaRepository<Device, Long> {}
+import java.util.List;
+
+public interface DeviceRepository extends JpaRepository<Device, Long> {
+    List<Device> findByUserId(Long userId);
+}
