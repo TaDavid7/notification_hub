@@ -1,0 +1,1 @@
+ALTER TABLE notification_requests ADD COLUMN channel TEXT NOT NULL DEFAULT 'DISCORD';

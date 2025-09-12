@@ -19,23 +19,21 @@ public class NotificationRequestController{
 
     //dto
     public static class CreateNotification{
-        public String targetType;
-        public String targetRef;
         public String title;
         public String body;
         public String priority;
+        public String channel;
     }
 
     @PostMapping
     public ResponseEntity<NotificationRequest> create(@RequestBody CreateNotification body){
         NotificationRequest r = new NotificationRequest();
-        r.setTargetType(body.targetType);
-        r.setTargetRef(body.targetRef);
         r.setTitle(body.title);
         r.setBody(body.body);
         if(body.priority != null && !body.priority.isBlank()){
             r.setPriority(body.priority);
         }
+        r.setChannel(body.channel);
 
         NotificationRequest saved = repo.save(r);
         service.process(saved);

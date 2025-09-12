@@ -10,12 +10,6 @@ public class NotificationRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "target_type", nullable = false)
-    private String targetType;
-
-    @Column(name = "target_ref", nullable = false)
-    private String targetRef;
-
     @Column(name = "title", nullable = false)
     private String title;
 
@@ -31,6 +25,9 @@ public class NotificationRequest {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+    @Column(name = "channel", nullable = false)
+    private String channel = "DISCORD";
+
     public NotificationRequest() {}
 
     @PrePersist
@@ -39,11 +36,6 @@ public class NotificationRequest {
     }
 
     public Long getId() { return id; }
-    public String getTargetType() { return targetType; }
-    public void setTargetType(String targetType) { this.targetType = targetType; }
-
-    public String getTargetRef() { return targetRef; }
-    public void setTargetRef(String targetRef) { this.targetRef = targetRef; }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -58,4 +50,11 @@ public class NotificationRequest {
     public void setStatus(String status) { this.status = status; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
+
+    public String getChannel() {
+        return channel;
+    }
+    public void setChannel(String channel){
+        this.channel = channel;
+    }
 }
