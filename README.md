@@ -48,7 +48,18 @@ cd notification_hub/notification0hub
 And if it works you should see that it connected and you're done!
 
 ---
+## Future improvements
+- JWT security
+- Add an event driven notification (automatic)
+- Add customization for kind of message for event pipeline
+
+---
 
 ## Author
 Made by David T.
+
+---
+
+## License 
+Licensed under the Apache License 2.0 – see the [LICENSE](LICENSE) file for details.
 
