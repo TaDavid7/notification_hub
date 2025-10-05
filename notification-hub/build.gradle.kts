@@ -30,7 +30,12 @@ dependencies {
 	implementation("com.sendgrid:sendgrid-java:4.10.3")
 	runtimeOnly("org.postgresql:postgresql")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test{
+    useJUnitPlatform()
 }
 
 tasks.withType<Test> {
