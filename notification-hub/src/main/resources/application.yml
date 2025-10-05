@@ -19,7 +19,7 @@ management:
         include: health,info
 
 discord:
-  webhookUrl: "https://discordapp.com/api/webhooks/1415934425145016350/qQc0feoC076nzFj0U2QfLTvzurM93T8G1CP-nvwCFqrgf02Ir9ohpqAVuTIVwVEfL9n4"   # use env vars on each machine
+  webhookUrl: "link here"   # use env vars on each machine
 
 slack:
-  webhookUrl: "https://hooks.slack.com/services/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"
+  webhookUrl: "link here"
