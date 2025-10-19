@@ -2,6 +2,7 @@ plugins {
 	java
 	id("org.springframework.boot") version "3.5.5"
 	id("io.spring.dependency-management") version "1.1.7"
+    jacoco
 }
 
 group = "com.david"
@@ -12,6 +13,31 @@ java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(17)
 	}
+}
+
+jacoco{
+    toolVersion = "0.8.11"
+}
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.test)
+    violationRules {
+        rule {
+            // You can also add BRANCH or INSTRUCTION counters if you prefer
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.90".toBigDecimal() // 90%
+            }
+        }
+    }
 }
 
 repositories {
@@ -38,7 +64,10 @@ dependencies {
 
 tasks.test{
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport) //generate report
 }
+
+tasks.check { dependsOn("jacocoTestCoverageVerification") }
 
 tasks.withType<Test> {
 	useJUnitPlatform()
