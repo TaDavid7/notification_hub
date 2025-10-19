@@ -2,15 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
 
 jobs:
-  test:
+  tests-and-coverage:
+    name: Tests & Coverage Gate
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,17 +20,22 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
+      - name: Verify Gradle wrapper exists
+        run: |
+          test -f notification-hub/gradlew || (echo "Missing Gradle wrapper in notification-hub/. Run 'gradle wrapper' locally and commit it." && exit 1)
 
-      - name: Verify (tests + coverage gate)
+      - name: Make gradlew executable
+        run: chmod +x notification-hub/gradlew
+
+      - name: Tests + coverage gate
+        working-directory: notification-hub
         run: ./gradlew clean test jacocoTestReport jacocoTestCoverageVerification --no-daemon
 
-      - name: Upload test reports (JUnit + JaCoCo HTML)
+      - name: Upload test & coverage reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-and-coverage-reports
           path: |
-            **/build/reports/tests/test/**
-            **/build/reports/jacoco/test/html/**
+            notification-hub/build/reports/tests/test/**
+            notification-hub/build/reports/jacoco/test/html/**
