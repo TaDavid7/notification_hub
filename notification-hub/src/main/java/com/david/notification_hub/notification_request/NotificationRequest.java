@@ -3,28 +3,38 @@ package com.david.notification_hub.notification_request;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+
 @Entity
 @Table(name = "notification_requests")
 public class NotificationRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @NotBlank
     private Long id;
 
+    @NotBlank
     @Column(name = "title", nullable = false)
     private String title;
 
+    @NotBlank
     @Column(name = "body", nullable = false)
     private String body;
 
+    @NotBlank
     @Column(name = "priority", nullable = false)
     private String priority = "NORMAL";
 
+    @NotBlank
     @Column(name = "status", nullable = false)
     private String status = "QUEUED";
 
+    @NotBlank
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+    @NotBlank
     @Column(name = "channel", nullable = false)
     private String channel = "DISCORD";
 

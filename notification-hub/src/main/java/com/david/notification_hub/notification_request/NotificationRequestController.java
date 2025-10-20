@@ -6,8 +6,10 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.Optional;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+
 @RestController
-@RequestMapping("/notifications")
 public class NotificationRequestController{
     private final NotificationRequestRepository repo;
     private final NotificationService service;
@@ -19,14 +21,19 @@ public class NotificationRequestController{
 
     //dto
     public static class CreateNotification{
+        @NotBlank
         public String title;
+        @NotBlank
         public String body;
+        @NotBlank
         public String priority;
+        @NotBlank
         public String channel;
     }
 
-    @PostMapping
-    public ResponseEntity<NotificationRequest> create(@RequestBody CreateNotification body){
+
+    @PostMapping("/api/notifications")
+    public ResponseEntity<NotificationRequest> create(@Valid @RequestBody CreateNotification body){
         NotificationRequest r = new NotificationRequest();
         r.setTitle(body.title);
         r.setBody(body.body);

@@ -1,21 +1,26 @@
-package com.david.notify;
+package com.david.notification_hub.notification_request;
 
+import com.david.notification_hub.notification_request.NotificationRequestController;
+import com.david.notification_hub.notification_request.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
-
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(NotificationRequestController.class)
 class NotificationRequestControllerValidationTest {
 
-    @Autowired MockMvc mvc;
+    @Autowired
+    private MockMvc mvc;
 
-    // Mock any collaborators the controller autowires:
-    @MockBean NotificationService notificationService;
+    @MockBean
+    private NotificationService notificationService;
+
+    @MockBean
+    NotificationRequestRepository notificationRequestRepository;
 
     @Test
     void returns400ForEmptyBody() throws Exception {
