@@ -11,7 +11,6 @@ import jakarta.validation.constraints.NotBlank;
 public class NotificationRequest {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @NotBlank
     private Long id;
 
     @NotBlank
@@ -30,7 +29,6 @@ public class NotificationRequest {
     @Column(name = "status", nullable = false)
     private String status = "QUEUED";
 
-    @NotBlank
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 

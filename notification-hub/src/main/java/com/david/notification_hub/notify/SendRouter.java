@@ -15,9 +15,9 @@ public class SendRouter{
     public SendResult send(String channel, String token, String title, String body, boolean isSandbox){
         String ch = channel;
         if(channel == null){
-            channel = "DISCORD";
+            ch = "DISCORD";
         } else{
-            channel.toUpperCase();
+            ch = channel.toUpperCase();
         }
         return switch (ch){
             case "DISCORD" -> discord.send(token, title, body, isSandbox);

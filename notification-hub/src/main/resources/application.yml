@@ -19,7 +19,14 @@ management:
         include: health,info
 
 discord:
-  webhookUrl: "link here"   # use env vars on each machine
+  webhookUrl:
 
 slack:
-  webhookUrl: "link here"
+  webhookUrl:
+
+canvas:
+  baseUrl:
+  token:
+  courseIds: [  ]
+  pollDelayMs: 250000               # 2 minutes
+  initialDelayMs: 5000              # 5 seconds on startup
