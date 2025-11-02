@@ -90,20 +90,32 @@ public class CanvasPoller {
             System.out.println("→ Creating notifications for: " + title);
 
             try {
-                // Slack
+                String idStr = String.valueOf(it.get("id")); // Canvas item id
+
+                // --- SLACK (optional while testing) ---
                 var sDto = new NotificationRequestController.CreateNotification();
-                sDto.title = title; sDto.body = body; sDto.priority = "normal"; sDto.channel = "SLACK";
+                sDto.title = title;
+                sDto.body = body;
+                sDto.priority = "normal";
+                sDto.channel = "SLACK";
+                sDto.externalSource = "canvas:" + type; // e.g., canvas:announcement
+                sDto.externalId = idStr;
                 controller.create(sDto);
 
-                // Small throttle to be gentle with webhooks (and avoid burst timeouts)
+                // Throttle
                 sleepQuiet(600);
 
-                // Discord
+                // --- DISCORD ---
                 var dDto = new NotificationRequestController.CreateNotification();
-                dDto.title = title; dDto.body = body; dDto.priority = "normal"; dDto.channel = "DISCORD";
+                dDto.title = title;
+                dDto.body = body;
+                dDto.priority = "normal";
+                dDto.channel = "DISCORD";
+                dDto.externalSource = "canvas:" + type;
+                dDto.externalId = idStr;
                 controller.create(dDto);
 
-                // Optional: throttle a bit between items too
+                // Optional per-item delay
                 sleepQuiet(800);
             } catch (Exception ex) {
                 System.out.println("!! Failed to create notifications for: " + title + " — " + ex.getClass().getSimpleName() + ": " + ex.getMessage());

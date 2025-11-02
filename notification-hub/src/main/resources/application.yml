@@ -19,14 +19,14 @@ management:
         include: health,info
 
 discord:
-  webhookUrl:
+  webhookUrl: ""
 
 slack:
-  webhookUrl:
+  webhookUrl: ""
 
 canvas:
-  baseUrl:
-  token:
-  courseIds: [  ]
+  baseUrl: ""
+  token: ""
+  courseIds: [ "" ]
   pollDelayMs: 250000               # 2 minutes
   initialDelayMs: 5000              # 5 seconds on startup

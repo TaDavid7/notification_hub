@@ -36,6 +36,15 @@ public class NotificationRequest {
     @Column(name = "channel", nullable = false)
     private String channel = "DISCORD";
 
+    @NotBlank
+    @Column(name = "external_source", nullable = false)
+    private String externalSource;
+
+    @NotBlank
+    @Column(name = "external_id", nullable = false)
+    private String externalId;     // e.g., Canvas item id as string
+
+
     public NotificationRequest() {}
 
     @PrePersist
@@ -65,4 +74,10 @@ public class NotificationRequest {
     public void setChannel(String channel){
         this.channel = channel;
     }
+
+    public String getExternalSource(){return externalSource;}
+    public void setExternalSource(String externalSource){this.externalSource = externalSource;}
+
+    public String getExternalId(){return externalId;}
+    public void setExternalId(String externalId){this.externalId = externalId;}
 }
