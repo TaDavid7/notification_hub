@@ -13,6 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 
 //just for notes
@@ -43,18 +45,22 @@ class NotificationRequestControllerValidationTest {
 
 
     @Test
-    void post_validBody_returns201() throws Exception{
-        String validJson = """
+    void post_validBody_returns201() throws Exception {
+      when(notificationRequestRepository.save(any(NotificationRequest.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
+      String validJson = """
       {
         "title": "Hello",
         "body": "World",
         "channel": "DISCORD",
-        "priority": "HIGH"
+        "priority": "HIGH",
+        "externalSource": "canvas:announcement",
+        "externalId": "12345"
       }
-    """;
-        mvc.perform(post("/api/notifications")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validJson))
-                .andExpect(status().isCreated());
+      """;
+          mvc.perform(post("/api/notifications")
+                          .contentType(MediaType.APPLICATION_JSON)
+                          .content(validJson))
+                  .andExpect(status().isCreated());
     }
 }

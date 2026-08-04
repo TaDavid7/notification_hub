@@ -49,7 +49,7 @@ public class DeliveryLog {
     public void setSucceeded(Boolean succeeded) { this.succeeded = succeeded; }
 
     public String getProviderResponse() { return providerResponse; }
-    public void setProviderResponse(String apnsResponse) { this.providerResponse = providerResponse; }
+    public void setProviderResponse(String providerResponse) { this.providerResponse = providerResponse; }
 
     public String getErrorMsg() { return errorMsg; }
     public void setErrorMsg(String errorMsg) { this.errorMsg = errorMsg; }

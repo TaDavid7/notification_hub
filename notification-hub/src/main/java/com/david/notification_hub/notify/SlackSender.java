@@ -1,45 +1,41 @@
 package com.david.notification_hub.notify;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Map;
 
 @Component
 public class SlackSender implements Sender {
     private final HttpClient http = HttpClient.newHttpClient();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Value("${slack.webhookUrl}")
     private String url;
 
     @Override
     public SendResult send(String token, String title, String body, boolean isSandbox) {
-        String text = title + " — " + body;
-        String json = "{\"text\":\"" + escape(text) + "\"}";
-
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
         try {
+            String text = (title == null ? "" : title) + " — " + (body == null ? "" : body);
+            String json = mapper.writeValueAsString(Map.of("text", text));
+
+            HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
             HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (res.statusCode() / 100 == 2) {
                 return SendResult.ok("SLACK_DELIVERED");
-            } else {
-                return SendResult.fail("HTTP " + res.statusCode());
             }
+            return SendResult.fail("HTTP " + res.statusCode() + ": " + res.body());
         } catch (Exception e) {
             return SendResult.fail(e.getMessage());
         }
-    }
-
-    private String escape(String s) {
-        if (s == null) {
-            return "";
-        }
-        return s.replace("\"", "\\\"");
     }
 }

@@ -1,8 +1,10 @@
 spring:
+  application:
+    name: notification-hub
   datasource:
-    url: jdbc:postgresql://127.0.0.1:5442/notification_hub
-    username: postgres
-    password: pass
+    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5442/notification_hub}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:pass}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -19,14 +21,17 @@ management:
         include: health,info
 
 discord:
-  webhookUrl: ""
+  webhookUrl: ${DISCORD_WEBHOOK_URL:}
 
 slack:
-  webhookUrl: ""
+  webhookUrl: ${SLACK_WEBHOOK_URL:}
 
 canvas:
-  baseUrl: ""
-  token: ""
-  courseIds: [ "" ]
-  pollDelayMs: 250000               # 2 minutes
+  baseUrl: ${CANVAS_BASE_URL:}
+  token: ${CANVAS_TOKEN:}
+  # Comma-separated course ids, e.g. "12345,67890". Must be a scalar, not a
+  # YAML list: Spring flattens lists to canvas.courseIds[0] and @Value cannot
+  # resolve that key.
+  courseIds: ${CANVAS_COURSE_IDS:}
+  pollDelayMs: 120000               # 2 minutes
   initialDelayMs: 5000              # 5 seconds on startup
