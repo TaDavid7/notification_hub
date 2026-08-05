@@ -1,0 +1,29 @@
+# Docker uploads this whole folder to the daemon before building.
+# Without these exclusions every build ships ~50MB of junk.
+
+build/
+.gradle/
+postgres_data/
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.idea/
+*.iml
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+# Secrets — must never enter an image layer
+.env
+application-local.yml
+src/main/resources/application-local.yml
+
+# Docker's own files
+Dockerfile
+docker-compose.yml
+README.md
+HELP.md

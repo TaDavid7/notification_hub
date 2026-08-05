@@ -1,0 +1,41 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: notifhub-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: notification_hub
+    ports:
+      - "5442:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d notification_hub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    container_name: notifhub-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/notification_hub
+      DB_USERNAME: postgres
+      DB_PASSWORD: pass
+
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+
+      CANVAS_BASE_URL: ${CANVAS_BASE_URL:-}
+      CANVAS_TOKEN: ${CANVAS_TOKEN:-}
+      CANVAS_COURSE_IDS: ${CANVAS_COURSE_IDS:-}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

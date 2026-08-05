@@ -23,8 +23,6 @@ dependencies {
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
-    implementation("com.eatthepath:pushy:0.15.4")
-    implementation("com.sendgrid:sendgrid-java:4.10.3")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     runtimeOnly("org.postgresql:postgresql")
 

@@ -33,5 +33,5 @@ canvas:
   # YAML list: Spring flattens lists to canvas.courseIds[0] and @Value cannot
   # resolve that key.
   courseIds: ${CANVAS_COURSE_IDS:}
-  pollDelayMs: 120000               # 2 minutes
+  pollDelayMs: 86400000      # once a day
   initialDelayMs: 5000              # 5 seconds on startup
