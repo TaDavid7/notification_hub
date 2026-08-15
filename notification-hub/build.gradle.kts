@@ -30,7 +30,11 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
     testImplementation("org.mockito:mockito-core:5.13.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.13.0")
-    testImplementation("com.h2database:h2:2.3.232")
+    // Real PostgreSQL in tests instead of H2, so Flyway migrations and
+    // Postgres-only features (partial unique indexes) are actually exercised
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

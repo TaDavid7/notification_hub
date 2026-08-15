@@ -1,18 +1,18 @@
 package com.david.notification_hub;
 
+import com.david.notification_hub.support.AbstractPostgresTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
 
-
+/**
+ * Boots the full context against a real PostgreSQL container. Because
+ * ddl-auto is 'validate', this passing means Flyway built a schema that
+ * actually matches the JPA entities - something the old H2 setup
+ * (flyway disabled, ddl-auto create-drop) could never tell us.
+ */
 @SpringBootTest
-@TestPropertySource(properties = {
-        "spring.flyway.enabled=false",
-        "spring.datasource.url=jdbc:h2:mem:notif;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
-        "spring.datasource.driverClassName=org.h2.Driver",
-        "spring.jpa.hibernate.ddl-auto=create-drop"
-})
-class NotificationHubApplicationTests {
+class NotificationHubApplicationTests extends AbstractPostgresTest {
+
     @Test
     void contextLoads() { }
 }

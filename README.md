@@ -66,6 +66,17 @@ docker compose up -d postgres
 The defaults in `application.yml` already target `localhost:5442`, so no extra config is
 needed. Webhook URLs come from environment variables in this mode, not the `.env` file.
 
+### Tests
+
+```bash
+./gradlew test
+```
+
+Integration tests run against a real PostgreSQL container via Testcontainers, so
+**Docker must be running** — the same `postgres:15` image compose uses. Migrations are
+applied by Flyway and the schema is validated against the JPA entities, so a passing
+suite means the migrations and the entities actually agree.
+
 ---
 ## Future improvements
 - JWT security
