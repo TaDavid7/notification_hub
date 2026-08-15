@@ -34,6 +34,10 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
+tasks.bootJar {
+    archiveFileName.set("app.jar")
+}
+
 jacoco {
     toolVersion = "0.8.11"
 }

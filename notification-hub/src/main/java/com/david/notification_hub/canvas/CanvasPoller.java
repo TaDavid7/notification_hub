@@ -31,6 +31,9 @@ public class CanvasPoller {
     private final String baseUrl; //canvas API root URL
     // contexts are already shaped like "course_<id>"
     private final List<String> contextCodes;
+    // false when Canvas isn't configured, so tick() stays a no-op instead of
+    // firing requests at a base URL that doesn't exist
+    private final boolean enabled;
 
     //Spring calls new CanvasPoller()
     public CanvasPoller(
@@ -42,7 +45,10 @@ public class CanvasPoller {
             @Value("${canvas.courseIds:}") String courseIdsRaw
     ) {
         this.controller = controller;
-        this.baseUrl = baseUrl.endsWith("/api/v1") ? baseUrl : baseUrl + "/api/v1";
+        //an unset CANVAS_BASE_URL arrives as "" (see the :- default in application.yml),
+        //which would otherwise become the relative "/api/v1" and resolve to localhost:80
+        String base = baseUrl == null ? "" : baseUrl.trim();
+        this.baseUrl = base.isBlank() || base.endsWith("/api/v1") ? base : base + "/api/v1";
         this.http = builder
                 .baseUrl(this.baseUrl) //builds URL based on canvas in .yml and everything relative to this
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token)  //canvas knows who with authorization by token
@@ -61,12 +67,21 @@ public class CanvasPoller {
                 //.map(id -> "course_" + id) transform each id into course_a, course_b
                 //.toList() puts back into list
 
-        System.out.println("Loaded courseIds=" + ids + " -> contexts=" + this.contextCodes);
+        //both halves are required: a base URL to call, and at least one course to ask about
+        this.enabled = !this.baseUrl.isBlank() && !this.contextCodes.isEmpty();
+
+        if (this.enabled) {
+            System.out.println("Canvas polling enabled. courseIds=" + ids + " -> contexts=" + this.contextCodes);
+        } else {
+            System.out.println("Canvas polling disabled (set CANVAS_BASE_URL and CANVAS_COURSE_IDS to enable).");
+        }
     }
 
     @Scheduled(fixedDelayString = "${canvas.pollDelayMs:120000}", initialDelayString = "${canvas.initialDelayMs:5000}")
     // run method automatically. initialDelay = wait 5 seconds after app startup before first run, fixedDelay = wait 2 min after prev run finishes before starting next
     public void tick() {
+        if (!enabled) return; //nothing to poll, and no base URL to poll it from
+
         var now = OffsetDateTime.now(ZoneOffset.UTC); //current timestamp in UTC, var infer the type
         var startIso = now.minusDays(1).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME); //1 day ago
         var endIso   = now.plusDays(7).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME); //7 days ahead
@@ -75,10 +90,8 @@ public class CanvasPoller {
         System.out.println("Contexts = " + contextCodes);
         System.out.println("Time window = " + startIso + " → " + endIso);
 
-        // Avoid calling /announcements with empty contexts (Canvas returns an error object)
-        var announcements = contextCodes.isEmpty()
-                ? List.<Map<String,Object>>of() //if no courses, use empty list
-                : fetchAnnouncements(contextCodes, startIso, endIso); //api call for announcement
+        //contexts are guaranteed non-empty here, so Canvas won't hand back an error object
+        var announcements = fetchAnnouncements(contextCodes, startIso, endIso); //api call for announcement
 
         //api calls for events and assignments
         var events       = fetchCalendar("event", contextCodes, startIso, endIso);

@@ -1,18 +1,19 @@
 package com.david.notification_hub.delivery_logs;
 
 import com.david.notification_hub.notification_request.NotificationRequest;
-import jakarta.persistence.*;
+import jakarta.persistence.*; //all JPA annotations Entity, Id, Column
 import java.time.OffsetDateTime;
 
-@Entity
-@Table(name = "delivery_logs")
+//JPA entity is a Java class that maps directly onto database table
+@Entity //tells JPA/Hibernate this class reps a database table
+@Table(name = "delivery_logs") //names the table as delivery_logs
 public class DeliveryLog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "request_id", nullable = false)
+    @ManyToOne //foreign-key relationship, each attempt get its own log row
+    @JoinColumn(name = "request_id", nullable = false) //foreign key column called request_id
     private NotificationRequest request;
 
     @Column(name = "attempt", nullable = false)

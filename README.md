@@ -6,29 +6,17 @@ It routes notifications to multiple channels while carefully logging each reques
 ---
 
 ## Setup
-- Java 17
-- DockerDesktop
+- Docker Desktop
 - Git
+- Java 17 (only if you want to run the app outside Docker)
 
 ### Clone
 ```bash
 git clone https://github.com/TaDavid7/notification_hub.git
-cd notification-hub
+cd notification_hub/notification-hub
 ```
 
-### Start PostgreSQL with Docker
-
-```powershell
-docker run -d --name notifhub-postgres `
-  -e POSTGRES_USER=postgres `
-  -e POSTGRES_PASSWORD=pass `
-  -e POSTGRES_DB=notification_hub `
-  -p 5442:5432 `
-  -v notifhub_pgdata:/var/lib/postgresql/data `
-  postgres:15
-```
-
-###W ebhook URLs
+### Webhook URLs
 
 #### Discord
 For discord create a server, or one that you have permissions and create a webhook integration. You can do this by going into your channel settings and click on new webhook. You can specify what the name is and channel after clicking the webhook you made. Then copy the webhook URL.
@@ -37,15 +25,46 @@ For discord create a server, or one that you have permissions and create a webho
 For slack create a workspace, or one that you have permissions and create an app by clicking add apps on the left, and then browse apps. There should be able to click on Build, where you can create an app and then in the incoming WebHooks section create a new WebHook and copy the URL.
 
 #### Configure app settings
-Then in the project under src/main/resources/application.yml, you can set the discord and slack webhook URLs with the one you got. Make sure to have " " around them.
+Create a `.env` file next to `docker-compose.yml` and put your webhook URLs in it. This
+file is gitignored, so your secrets never get committed:
 
-Then make sure you are in the same directorty that holds gradlew (notification_hub/notification-hub/gradlew)
-```bash
-cd notification_hub/notification0hub
-.\gradlew clean bootRun
+```ini
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+
+# Optional - only needed for the Canvas poller
+CANVAS_BASE_URL=https://yourschool.instructure.com
+CANVAS_TOKEN=...
+CANVAS_COURSE_IDS=12345,67890
 ```
 
-And if it works you should see that it connected and you're done!
+### Run
+
+```bash
+docker compose up --build
+```
+
+This starts PostgreSQL and the app together. Compose waits for the database to pass its
+health check before booting the app, and Flyway applies the migrations on startup.
+
+- API: http://localhost:8080/api/notifications
+- Swagger UI: http://localhost:8080/swagger-ui.html
+- Health: http://localhost:8080/actuator/health
+- Postgres (from the host): `localhost:5442`
+
+To stop, `Ctrl+C` then `docker compose down`. Add `-v` to also wipe the database volume.
+
+#### Running the app outside Docker
+
+If you'd rather run the app from Gradle, start just the database and point the app at it:
+
+```bash
+docker compose up -d postgres
+./gradlew bootRun          # .\gradlew.bat bootRun on Windows
+```
+
+The defaults in `application.yml` already target `localhost:5442`, so no extra config is
+needed. Webhook URLs come from environment variables in this mode, not the `.env` file.
 
 ---
 ## Future improvements

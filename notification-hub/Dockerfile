@@ -25,8 +25,7 @@ WORKDIR /app
 # Run as an unprivileged user
 RUN useradd -r -u 1001 spring
 
-# Named explicitly rather than globbed
-COPY --from=build /app/build/libs/notification-hub-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /app/build/libs/app.jar app.jar
 
 USER spring
 EXPOSE 8080
