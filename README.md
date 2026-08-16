@@ -8,7 +8,7 @@ It routes notifications to multiple channels while carefully logging each reques
 ## Setup
 - Docker Desktop
 - Git
-- Java 17 (only if you want to run the app outside Docker)
+- Java 17 (only if you want to run outside Docker)
 
 ### Clone
 ```bash
