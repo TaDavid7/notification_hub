@@ -18,10 +18,10 @@ postgresql - translator between java and postgres
 springdoc-openapi - webpage documentation at /swagger-ui.html
 starter-webflux - could be replaced, just using WebClient
 starter-test - test framework, mock libary, fake HTTP requests
-h2 - a fake database
+testcontainers (junit-jupiter + postgresql) - spins up a real postgres:15 in tests, replaced h2
 junit-platform-launcher - lets gradle run
 
-**Run**
+**Run (local)**
 Start Docker Desktop, then from `notification-hub/`:
 
 ```powershell
@@ -38,14 +38,94 @@ docker compose up -d postgres
 .\gradlew.bat bootRun
 ```
 
-1. Untrack postgres_data, fix the jar name, unify the docs — small cleanup, finishes the Docker work you already started.
-2. Testcontainers. Still the highest-value next step. You test against H2 (build.gradle.kts:35) but ship Postgres, so the DO $$ ... $$ block and partial unique index in V5__idempotency_unique_key.sql
-   are never exercised by CI. You now have compose proving the Postgres wiring works — Testcontainers makes CI prove it too.
-3. CI builds and pushes the image. Trivial now that the Dockerfile exists.
-4. Get the HTTP send out of the transaction. Unchanged and still the real architectural debt: NotificationService.process() does the webhook call inside @Transactional
-   (NotificationService.java:30-38), and CanvasPoller calls controller.create() directly in-process (CanvasPoller.java:119). Add an outbox table first.
-5. Kafka. Poller → notifications.requested → consumer sends → notifications.delivered, with retry/backoff and a DLT replacing the "catch, mark FAILED, move on" at
-   NotificationRequestController.java:63. Also lets you delete the Thread.sleep(600) throttles.
-6. Redis rate limiter, when you have >1 replica.
-7. Kubernetes. Same three blockers as before: split health into liveness/readiness (currently just health,info at application.yml:21), move Flyway to an init container/Job so replicas don't race, and
-   solve the @Scheduled singleton problem — CanvasPoller would poll Canvas once per replica, so you need ShedLock, leader election, or a CronJob.
+---
+
+**Plan**
+
+Kafka and Kubernetes are dropped. AWS first, Redis second.
+
+1. ~~**Deploy to AWS**~~ - **DONE.** Live at https://pukt4aem9j.us-east-1.awsapprunner.com
+
+   App Runner + RDS Postgres + ECR, account 906048429586, us-east-1. No app code changed -
+   everything was already read from environment variables.
+
+   | resource | name |
+   | --- | --- |
+   | App Runner service | `notification-hub` |
+   | RDS Postgres 15.17 | `notification-hub-db` (db.t4g.micro) |
+   | ECR repo | `906048429586.dkr.ecr.us-east-1.amazonaws.com/notification-hub` |
+   | IAM role (ECR pull) | `AppRunnerECRAccessRole` |
+
+   Pushing `:latest` to ECR auto-redeploys the service.
+
+   **Known tradeoff:** RDS is publicly accessible with the security group open on 5432,
+   protected only by a 28-character random password. App Runner's VPC connector routes
+   *all* egress through the VPC, which would have blocked the Discord/Slack webhooks
+   without a NAT Gateway (~$32/month, more than everything else combined). Fix later with
+   a NAT Gateway if this ever holds real data.
+
+   **Still deferred from this step:** GitHub Actions → ECR (images are pushed by hand
+   right now), and webhook secrets live as plain App Runner env vars rather than SSM.
+   About 20 minutes each.
+
+   Budget roughly $10-25/month; App Runner bills for idle memory, so pause it when not
+   demoing.
+
+   **Current state: everything is stopped.** App Runner is PAUSED, RDS is STOPPED.
+   Nothing is being billed except RDS storage (~$2/month for 20GB).
+
+   > **RDS auto-starts after 7 days.** AWS will not leave an instance stopped
+   > indefinitely. Either stop it again, or snapshot and delete it if you're done for a
+   > while.
+
+   **To bring it back up** (RDS first - App Runner health-checks the database):
+
+   ```powershell
+   $aws = "C:\Program Files\Amazon\AWSCLIV2\aws.exe"
+   $arn = "arn:aws:apprunner:us-east-1:906048429586:service/notification-hub/0a14f321bf4040e691c21f91716637e2"
+
+   & $aws rds start-db-instance --db-instance-identifier notification-hub-db --region us-east-1
+   # wait for available (a few minutes)
+   & $aws rds wait db-instance-available --db-instance-identifier notification-hub-db --region us-east-1
+   & $aws apprunner resume-service --service-arn $arn --region us-east-1
+   ```
+
+   **To ship a code change** (manual until GitHub Actions is wired up):
+
+   ```powershell
+   $repo = "906048429586.dkr.ecr.us-east-1.amazonaws.com/notification-hub"
+   $token = & $aws ecr get-login-password --region us-east-1
+   docker login --username AWS --password $token 906048429586.dkr.ecr.us-east-1.amazonaws.com
+   cd notification-hub
+   docker build -t notification-hub:latest .
+   docker tag notification-hub:latest "${repo}:latest"
+   docker push "${repo}:latest"    # App Runner auto-redeploys
+   ```
+
+   Gotchas hit during setup, so they don't cost time twice:
+   - PowerShell 5.1 mangles `docker login --password-stdin`; pass `--password $token`.
+   - `curl.exe` on Windows mangles inline JSON; write it to a file and use
+     `--data-binary "@file.json"`.
+   - The DB master password is in the session scratchpad, not the repo. If it's lost,
+     reset it with `aws rds modify-db-instance --master-user-password`.
+
+2. **Redis (ElastiCache), once max instances goes above 1.** Two jobs: ShedLock around
+   `CanvasPoller.tick()` so only one instance polls - this is what unblocks scaling - and
+   a shared token bucket so instances don't each get a full rate-limit budget against
+   Discord and Slack. Worthless at one instance, so don't provision it early.
+   Also needed before scaling: move Flyway out of app startup into a one-off task.
+
+**Deferred (not dropped)**
+
+- **Repo cleanup.** Coverage gate is `0.05` with `// 90%` beside it (build.gradle.kts:66,
+  73). `System.out.println` throughout CanvasPoller - worth swapping to SLF4J while
+  wiring up CI, since those lines are about to go to CloudWatch.
+
+- **HTTP error handling and the scheduler block.** Best interview material here, and it
+  needs no new infrastructure: the webhook call runs inside `@Transactional`
+  (NotificationService.java:30-38), holding a DB connection across a 10s HTTP timeout;
+  the controller catches `Exception`, logs nothing, and returns 201 for a failed send
+  (NotificationRequestController.java:61-66); `fetchAllPages` calls `.block()` with no
+  timeout, so one Canvas 401 kills the whole day's poll (CanvasPoller.java:184). Fix is a
+  transactional outbox plus a worker with retry/backoff. Good candidate for right after
+  the deploy is live.
