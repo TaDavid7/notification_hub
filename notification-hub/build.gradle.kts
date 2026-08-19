@@ -60,7 +60,16 @@ tasks.jacocoTestReport {
     }
 }
 
-// ✅ Configure the existing task (do NOT register a new one)
+// Configure the existing task (do NOT register a new one)
+//
+// This is a ratchet, not an aspiration. It sits just under actual line coverage
+// (53.5% at the time of writing) so the build fails on a regression rather than
+// passing a number nobody meets. It read "0.05" with "// 90%" next to it for a
+// while, which meant the gate was decorative.
+//
+// Raise it as coverage rises. The gap is concentrated in the HTTP senders -
+// DiscordSender is at 9% and SlackSender at 20%, both of which need a stubbed
+// HTTP server rather than more unit tests.
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     dependsOn(tasks.test)
     violationRules {
@@ -68,11 +77,10 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.05".toBigDecimal() // 90%
+                minimum = "0.50".toBigDecimal()
             }
         }
     }
 }
 
-// Make 'check' fail when below 90%
 tasks.check { dependsOn("jacocoTestCoverageVerification") }

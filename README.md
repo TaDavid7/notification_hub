@@ -52,6 +52,29 @@ health check before booting the app, and Flyway applies the migrations on startu
 - Health: http://localhost:8080/actuator/health
 - Postgres (from the host): `localhost:5442`
 
+### How delivery works
+
+Posting a notification does not send it. `POST /api/notifications` writes a row and
+returns **202 Accepted**; a background dispatcher picks it up within a few seconds,
+calls the Discord or Slack webhook, and writes the result back. This keeps a slow or
+failing webhook off the request thread and out of the database transaction.
+
+Poll `GET /api/notifications/{id}` for the outcome:
+
+| status | meaning |
+| --- | --- |
+| `QUEUED` | accepted, not yet attempted |
+| `SENDING` | a dispatcher is sending it right now |
+| `SENT` | the provider accepted it |
+| `RETRY` | last attempt failed; `nextAttemptAt` says when the next one is due |
+| `DEAD` | gave up after 5 attempts; `lastError` says why |
+
+Failed sends retry with exponential backoff (30s, doubling, capped at an hour, with
+jitter). Re-posting the same `externalSource` + `externalId` + `channel` returns
+**200** with the existing row instead of creating a duplicate. Every attempt leaves a
+row in `delivery_logs`. Timings are configurable under `notifications.*` in
+`application.yml`.
+
 To stop, `Ctrl+C` then `docker compose down`. Add `-v` to also wipe the database volume.
 
 #### Running the app outside Docker

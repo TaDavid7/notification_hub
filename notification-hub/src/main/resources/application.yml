@@ -26,6 +26,21 @@ discord:
 slack:
   webhookUrl: ${SLACK_WEBHOOK_URL:}
 
+notifications:
+  # Background dispatcher that drains the outbox. Sends happen here, never on the
+  # request thread, so a slow webhook can't hold a DB connection or a caller open.
+  dispatch:
+    delayMs: 5000              # gap between passes
+    initialDelayMs: 10000      # let the app finish starting first
+    batchSize: 25              # rows claimed per pass
+    maxAttempts: 5             # then the row goes DEAD with last_error kept
+    baseBackoffSeconds: 30     # doubles per attempt: 30s, 1m, 2m, 4m (jittered)
+    maxBackoffSeconds: 3600
+    stuckAfterSeconds: 300     # a SENDING row older than this is treated as orphaned
+  reaper:
+    delayMs: 60000
+    initialDelayMs: 60000
+
 canvas:
   baseUrl: ${CANVAS_BASE_URL:}
   token: ${CANVAS_TOKEN:}

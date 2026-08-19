@@ -1,7 +1,5 @@
 package com.david.notification_hub.notification_request;
 
-import com.david.notification_hub.notification_request.NotificationRequestController;
-import com.david.notification_hub.notification_request.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -12,6 +10,7 @@ import org.springframework.http.MediaType;
 
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -30,10 +29,21 @@ class NotificationRequestControllerValidationTest {
     private MockMvc mvc;
 
     @MockBean
-    private NotificationService notificationService;
+    private NotificationIntakeService intake;
 
     @MockBean
     NotificationRequestRepository notificationRequestRepository;
+
+    private static final String VALID_JSON = """
+    {
+      "title": "Hello",
+      "body": "World",
+      "channel": "DISCORD",
+      "priority": "HIGH",
+      "externalSource": "canvas:announcement",
+      "externalId": "12345"
+    }
+    """;
 
     @Test
     void returns400ForEmptyBody() throws Exception {
@@ -43,24 +53,38 @@ class NotificationRequestControllerValidationTest {
                 .andExpect(status().isBadRequest());
     }
 
-
+    /**
+     * 202, not 201: the row is enqueued and the dispatcher sends it later, so the
+     * response can't claim the message was delivered.
+     */
     @Test
-    void post_validBody_returns201() throws Exception {
-      when(notificationRequestRepository.save(any(NotificationRequest.class)))
-        .thenAnswer(inv -> inv.getArgument(0));
-      String validJson = """
-      {
-        "title": "Hello",
-        "body": "World",
-        "channel": "DISCORD",
-        "priority": "HIGH",
-        "externalSource": "canvas:announcement",
-        "externalId": "12345"
-      }
-      """;
-          mvc.perform(post("/api/notifications")
-                          .contentType(MediaType.APPLICATION_JSON)
-                          .content(validJson))
-                  .andExpect(status().isCreated());
+    void post_validBody_returns202Accepted() throws Exception {
+        NotificationRequest saved = new NotificationRequest();
+        saved.setTitle("Hello");
+        saved.setStatus(NotificationStatus.QUEUED);
+        when(intake.enqueue(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new NotificationIntakeService.Result(saved, false));
+
+        mvc.perform(post("/api/notifications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_JSON))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value(NotificationStatus.QUEUED));
+    }
+
+    /** A re-post of the same source item is idempotent: 200 with the row that won. */
+    @Test
+    void post_duplicate_returns200() throws Exception {
+        NotificationRequest existing = new NotificationRequest();
+        existing.setTitle("Hello");
+        existing.setStatus(NotificationStatus.SENT);
+        when(intake.enqueue(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new NotificationIntakeService.Result(existing, true));
+
+        mvc.perform(post("/api/notifications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(NotificationStatus.SENT));
     }
 }

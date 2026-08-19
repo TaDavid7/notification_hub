@@ -18,3 +18,14 @@ canvas:
   baseUrl: ""
   token: ""
   courseIds: ""
+
+# Park the background dispatcher far enough out that it never fires during a test
+# run. Tests that care about dispatch behaviour call the methods directly, so a
+# timer racing them would only make results non-deterministic.
+notifications:
+  dispatch:
+    initialDelayMs: 86400000
+    delayMs: 86400000
+  reaper:
+    initialDelayMs: 86400000
+    delayMs: 86400000

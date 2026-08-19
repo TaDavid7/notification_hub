@@ -44,6 +44,25 @@ public class NotificationRequest {
     @Column(name = "external_id", nullable = false)
     private String externalId;     // e.g., Canvas item id as string
 
+    // --- outbox bookkeeping (V6) ---
+
+    @Column(name = "attempts", nullable = false)
+    private int attempts = 0;
+
+    // When the dispatcher may next try this row. Null means "not queued".
+    @Column(name = "next_attempt_at")
+    private OffsetDateTime nextAttemptAt;
+
+    // Why the last attempt failed. Kept so a DEAD row explains itself without
+    // needing to join delivery_logs.
+    @Column(name = "last_error")
+    private String lastError;
+
+    // Set when a dispatcher claims the row; the reaper uses it to spot rows
+    // orphaned by an instance that died mid-send.
+    @Column(name = "claimed_at")
+    private OffsetDateTime claimedAt;
+
 
     public NotificationRequest() {}
 
@@ -80,4 +99,16 @@ public class NotificationRequest {
 
     public String getExternalId(){return externalId;}
     public void setExternalId(String externalId){this.externalId = externalId;}
+
+    public int getAttempts() { return attempts; }
+    public void setAttempts(int attempts) { this.attempts = attempts; }
+
+    public OffsetDateTime getNextAttemptAt() { return nextAttemptAt; }
+    public void setNextAttemptAt(OffsetDateTime nextAttemptAt) { this.nextAttemptAt = nextAttemptAt; }
+
+    public String getLastError() { return lastError; }
+    public void setLastError(String lastError) { this.lastError = lastError; }
+
+    public OffsetDateTime getClaimedAt() { return claimedAt; }
+    public void setClaimedAt(OffsetDateTime claimedAt) { this.claimedAt = claimedAt; }
 }

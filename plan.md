@@ -133,17 +133,107 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
    Discord and Slack. Worthless at one instance, so don't provision it early.
    Also needed before scaling: move Flyway out of app startup into a one-off task.
 
+**Done since the deploy**
+
+- ~~**Repo cleanup.**~~ Coverage gate now reads `0.50`, which is a real ratchet just under
+  actual line coverage rather than `0.05` wearing a `// 90%` comment. CanvasPoller logs
+  through SLF4J instead of `System.out.println`, so the lines arrive in CloudWatch with a
+  level and a timestamp - and failures now carry a stack trace, which the printlns threw
+  away.
+
+  Coverage went 29.5% -> 53.5% with the outbox tests below. The remaining gap is almost
+  entirely the two HTTP senders (DiscordSender 9%, SlackSender 20%); testing those needs a
+  stubbed HTTP server (WireMock or `MockWebServer`), which is the next honest step before
+  the gate can move up.
+
+- ~~**HTTP error handling and the scheduler block.**~~ Replaced with a transactional
+  outbox (`V6__outbox.sql`).
+
+  | was | now |
+  | --- | --- |
+  | webhook sent inside `@Transactional` | send happens with no transaction open |
+  | 201 returned for a failed send | 202 Accepted; status is polled from the row |
+  | `catch (Exception)` logging nothing | failures logged, retried, and kept in `last_error` |
+  | `.block()` with no timeout | `.block(Duration.ofSeconds(20))` |
+  | one failing Canvas call killed the poll | each endpoint fetched independently |
+  | poller called the controller directly | both go through `NotificationIntakeService` |
+
+  Shape: `POST` writes a QUEUED row and returns. `NotificationDispatcher` claims a batch
+  every 5s (`FOR UPDATE SKIP LOCKED`), sends outside any transaction, and writes each
+  outcome back in its own short transaction. Failures retry with jittered exponential
+  backoff (30s doubling, capped at 1h) and go DEAD after 5 attempts with the error kept.
+  A reaper requeues rows left in SENDING by a crashed instance.
+
+  **API change worth knowing:** `POST /api/notifications` returns **202**, not 201. It
+  cannot honestly report delivery any more, because delivery has not happened yet. A
+  duplicate still returns 200 with the existing row. Tuning lives under `notifications.*`
+  in `application.yml`.
+
+  Because the claim query uses `SKIP LOCKED`, the dispatcher is already safe to run on
+  several instances - so the Redis/ShedLock item below only needs to cover `CanvasPoller`,
+  not this loop.
+
 **Deferred (not dropped)**
 
-- **Repo cleanup.** Coverage gate is `0.05` with `// 90%` beside it (build.gradle.kts:66,
-  73). `System.out.println` throughout CanvasPoller - worth swapping to SLF4J while
-  wiring up CI, since those lines are about to go to CloudWatch.
+- **Finish the SSM switch-over.** The parameters and the IAM role exist; App Runner is
+  still reading plaintext env vars because `update-service` refuses to run against a
+  PAUSED service:
 
-- **HTTP error handling and the scheduler block.** Best interview material here, and it
-  needs no new infrastructure: the webhook call runs inside `@Transactional`
-  (NotificationService.java:30-38), holding a DB connection across a 10s HTTP timeout;
-  the controller catches `Exception`, logs nothing, and returns 201 for a failed send
-  (NotificationRequestController.java:61-66); `fetchAllPages` calls `.block()` with no
-  timeout, so one Canvas 401 kills the whole day's poll (CanvasPoller.java:184). Fix is a
-  transactional outbox plus a worker with retry/backoff. Good candidate for right after
-  the deploy is live.
+  | resource | name |
+  | --- | --- |
+  | SSM (SecureString) | `/notification-hub/discord-webhook-url` |
+  | SSM (SecureString) | `/notification-hub/slack-webhook-url` |
+  | SSM (SecureString) | `/notification-hub/db-password` |
+  | IAM role | `AppRunnerInstanceRole` + inline `ReadNotificationHubSecrets` |
+
+  To finish, resume the service first (RDS, then App Runner - see above), then move the
+  three values from `RuntimeEnvironmentVariables` to `RuntimeEnvironmentSecrets` and
+  attach the instance role. `DB_URL` and `DB_USERNAME` stay as plain env vars.
+
+  ```powershell
+  # DB_URL is read back from the service so the endpoint isn't written down here
+  $arn = "arn:aws:apprunner:us-east-1:906048429586:service/notification-hub/0a14f321bf4040e691c21f91716637e2"
+  $dbUrl = (& $aws apprunner describe-service --service-arn $arn --region us-east-1 `
+      --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables.DB_URL' `
+      --output text)
+
+  $p = "arn:aws:ssm:us-east-1:906048429586:parameter/notification-hub"
+  $cfg = @{
+    ServiceArn = $arn
+    SourceConfiguration = @{
+      ImageRepository = @{
+        ImageIdentifier = "906048429586.dkr.ecr.us-east-1.amazonaws.com/notification-hub:latest"
+        ImageRepositoryType = "ECR"
+        ImageConfiguration = @{
+          Port = "8080"
+          RuntimeEnvironmentVariables = @{ DB_URL = $dbUrl; DB_USERNAME = "postgres" }
+          RuntimeEnvironmentSecrets = @{
+            DB_PASSWORD         = "$p/db-password"
+            DISCORD_WEBHOOK_URL = "$p/discord-webhook-url"
+            SLACK_WEBHOOK_URL   = "$p/slack-webhook-url"
+          }
+        }
+      }
+      AutoDeploymentsEnabled = $true
+      AuthenticationConfiguration = @{ AccessRoleArn = "arn:aws:iam::906048429586:role/AppRunnerECRAccessRole" }
+    }
+    InstanceConfiguration = @{
+      Cpu = "1024"; Memory = "2048"
+      InstanceRoleArn = "arn:aws:iam::906048429586:role/AppRunnerInstanceRole"
+    }
+  }
+  $cfg | ConvertTo-Json -Depth 10 | Out-File -Encoding utf8 update.json
+  & $aws apprunner update-service --region us-east-1 --cli-input-json file://update.json
+  ```
+
+  Passing `Cpu`/`Memory` explicitly is not optional - omitting `InstanceConfiguration`
+  fields resets them to the App Runner defaults.
+
+  **Rotate the webhook URLs when convenient.** Both were read out of the App Runner config
+  in plaintext while setting this up, so they've been on a terminal. Regenerate them in
+  Discord and Slack, then `aws ssm put-parameter --overwrite`; nothing else changes once
+  the service reads from SSM.
+
+- **Test the HTTP senders.** DiscordSender is the least-covered class in the repo (9%) and
+  contains the retry/`Retry-After` parsing, which is exactly the logic worth having tests
+  around. Needs a stubbed HTTP server. Raise the coverage gate afterwards.

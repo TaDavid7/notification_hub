@@ -1,8 +1,11 @@
 package com.david.notification_hub.canvas;
 //declares where file lives -> com/david/notification_hub/canvas/
 
-import com.david.notification_hub.notification_request.NotificationRequestController;
-//pulls in notification request controller class
+import com.david.notification_hub.notification_request.NotificationIntakeService;
+//the one entry point into the outbox, shared with the REST controller
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+//logging, so these lines land in CloudWatch with a level and timestamp
 import org.springframework.beans.factory.annotation.Value;
 //allows to inject values into field parameters
 import org.springframework.http.HttpHeaders;
@@ -16,18 +19,26 @@ import org.springframework.web.reactive.function.client.WebClient;
 //Spring HTTP client, make web requests
 
 import java.net.URI; //class for parsing URLS into pieces
+import java.time.Duration; //bounds the blocking Canvas calls
 import java.time.OffsetDateTime; //timestamp with a UTC offset
 import java.time.ZoneOffset; //gives UTC
 import java.time.format.DateTimeFormatter; //turns to string
 import java.util.*; //yay data structures
+import java.util.function.Supplier; //lets safeFetch wrap a call without running it
 import java.util.regex.Matcher; //reg expressions to parse header
 import java.util.regex.Pattern;
 
 @Component
 public class CanvasPoller {
 
+    private static final Logger log = LoggerFactory.getLogger(CanvasPoller.class);
+
+    // An unreachable or hanging Canvas used to block this thread forever, because
+    // .block() was called with no argument. One bad poll then never finished.
+    private static final Duration CANVAS_TIMEOUT = Duration.ofSeconds(20);
+
     private final WebClient http; //HTTP client instance
-    private final NotificationRequestController controller; //ref to notifRequest controller
+    private final NotificationIntakeService intake; //writes rows into the outbox
     private final String baseUrl; //canvas API root URL
     // contexts are already shaped like "course_<id>"
     private final List<String> contextCodes;
@@ -37,14 +48,14 @@ public class CanvasPoller {
 
     //Spring calls new CanvasPoller()
     public CanvasPoller(
-            NotificationRequestController controller, //passes controller
+            NotificationIntakeService intake, //enqueues, rather than sending inline
             WebClient.Builder builder,      //builder of webclient
             @Value("${canvas.baseUrl}") String baseUrl, //looks up canvas.baseUrl in application.yml
             @Value("${canvas.token}") String token,
             // read as String then split; robust against YAML/ENV variations
             @Value("${canvas.courseIds:}") String courseIdsRaw
     ) {
-        this.controller = controller;
+        this.intake = intake;
         //an unset CANVAS_BASE_URL arrives as "" (see the :- default in application.yml),
         //which would otherwise become the relative "/api/v1" and resolve to localhost:80
         String base = baseUrl == null ? "" : baseUrl.trim();
@@ -71,9 +82,9 @@ public class CanvasPoller {
         this.enabled = !this.baseUrl.isBlank() && !this.contextCodes.isEmpty();
 
         if (this.enabled) {
-            System.out.println("Canvas polling enabled. courseIds=" + ids + " -> contexts=" + this.contextCodes);
+            log.info("Canvas polling enabled. courseIds={} -> contexts={}", ids, this.contextCodes);
         } else {
-            System.out.println("Canvas polling disabled (set CANVAS_BASE_URL and CANVAS_COURSE_IDS to enable).");
+            log.info("Canvas polling disabled (set CANVAS_BASE_URL and CANVAS_COURSE_IDS to enable).");
         }
     }
 
@@ -86,19 +97,20 @@ public class CanvasPoller {
         var startIso = now.minusDays(1).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME); //1 day ago
         var endIso   = now.plusDays(7).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME); //7 days ahead
 
-        System.out.println("\nCanvas poll tick --------------------------------");
-        System.out.println("Contexts = " + contextCodes);
-        System.out.println("Time window = " + startIso + " → " + endIso);
+        log.info("Canvas poll tick. contexts={} window={} -> {}", contextCodes, startIso, endIso);
 
         //contexts are guaranteed non-empty here, so Canvas won't hand back an error object
-        var announcements = fetchAnnouncements(contextCodes, startIso, endIso); //api call for announcement
+        //each fetch is isolated: an expired token returns 401 on all three, but a single
+        //failing endpoint used to abort the entire day's poll before the others ran
+        var announcements = safeFetch("announcements",
+                () -> fetchAnnouncements(contextCodes, startIso, endIso));
+        var events        = safeFetch("calendar:event",
+                () -> fetchCalendar("event", contextCodes, startIso, endIso));
+        var assignments   = safeFetch("calendar:assignment",
+                () -> fetchCalendar("assignment", contextCodes, startIso, endIso));
 
-        //api calls for events and assignments
-        var events       = fetchCalendar("event", contextCodes, startIso, endIso);
-        var assignments  = fetchCalendar("assignment", contextCodes, startIso, endIso);
-
-        System.out.println("Fetched: Announcements=" + announcements.size()
-                + ", Events=" + events.size() + ", Assignments=" + assignments.size());
+        log.info("Canvas fetch complete. announcements={} events={} assignments={}",
+                announcements.size(), events.size(), assignments.size());
 
         //give each batch to method that creates notifications
         createBothFromList(announcements, "announcement");
@@ -115,46 +127,37 @@ public class CanvasPoller {
 
             //builds message [announcement] Midterm moved + newline with link or no link
             var body = "[" + type + "] " + title + (url != null && !url.isBlank() ? "\n" + url : "");
-            System.out.println("→ Creating notifications for: " + title);
+            //per-item, so debug: a busy poll would otherwise flood CloudWatch
+            log.debug("Enqueueing notifications for: {}", title);
 
             try {
                 String idStr = String.valueOf(it.get("id")); // Canvas item id
+                String source = "canvas:" + type;            // canvas:announcement
 
-                // SLACK
-                //Creates a DTO (data transfer object), class nested inside controller class
-                var sDto = new NotificationRequestController.CreateNotification();
-                sDto.title = title;
-                sDto.body = body;
-                sDto.priority = "normal";
-                sDto.channel = "SLACK";
-                sDto.externalSource = "canvas:" + type; //canvas:announcement
-                sDto.externalId = idStr;
-                controller.create(sDto);
-
-                // Throttle
-                sleepQuiet(600);
-
-                // DISCORD
-                var dDto = new NotificationRequestController.CreateNotification();
-                dDto.title = title;
-                dDto.body = body;
-                dDto.priority = "normal";
-                dDto.channel = "DISCORD";
-                dDto.externalSource = "canvas:" + type;
-                dDto.externalId = idStr;
-                controller.create(dDto);
-
-                // per-item delay
-                sleepQuiet(800);
+                // Two rows, one per channel. The old code slept 600ms and 800ms
+                // between these because each call sent a webhook inline; enqueueing
+                // is a single INSERT, and the dispatcher paces the actual sends.
+                intake.enqueue(title, body, "normal", "SLACK", source, idStr);
+                intake.enqueue(title, body, "normal", "DISCORD", source, idStr);
             } catch (Exception ex) {
-                System.out.println("!! Failed to create notifications for: " + title + " — " + ex.getClass().getSimpleName() + ": " + ex.getMessage());
+                //passing the exception last gives us the stack trace, which the
+                //old println threw away
+                log.error("Failed to enqueue notifications for: {}", title, ex);
             }
         }
     }
 
-    //pauses current thread, ignores interruptedexception
-    private static void sleepQuiet(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException ignored) {}
+    /**
+     * Runs one Canvas fetch, turning a failure into an empty list rather than an
+     * exception that unwinds {@link #tick()}.
+     */
+    private List<Map<String,Object>> safeFetch(String what, Supplier<List<Map<String,Object>>> fetch) {
+        try {
+            return fetch.get();
+        } catch (Exception ex) {
+            log.error("Canvas fetch failed for {}; continuing with the other endpoints", what, ex);
+            return List.of();
+        }
     }
 
     // Canvas fetch
@@ -180,8 +183,9 @@ public class CanvasPoller {
             //.uri(next) set the target URL
             //.exchangeToMono hands raw ClientREsponse to lambda as a List. mono is a value that arrives later
             //cr.toEntity(List.class) - deserialize body to ResponseEntity<List>
-            //.block() - waits right here until it arrives
-            var res = http.get().uri(next).exchangeToMono(cr -> cr.toEntity(List.class)).block();
+            //.block(timeout) - waits here, but gives up rather than hanging forever
+            var res = http.get().uri(next).exchangeToMono(cr -> cr.toEntity(List.class))
+                    .block(CANVAS_TIMEOUT);
             if (res == null) break;
             //use the body or an empty list if its null
             //List::of is a method ref for () -> List.of()
