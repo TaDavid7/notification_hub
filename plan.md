@@ -64,9 +64,8 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
    without a NAT Gateway (~$32/month, more than everything else combined). Fix later with
    a NAT Gateway if this ever holds real data.
 
-   **Still deferred from this step:** GitHub Actions → ECR (images are pushed by hand
-   right now), and webhook secrets live as plain App Runner env vars rather than SSM.
-   About 20 minutes each.
+   **Still deferred from this step:** webhook secrets live as plain App Runner env vars
+   rather than SSM. About 20 minutes.
 
    Budget roughly $10-25/month; App Runner bills for idle memory, so pause it when not
    demoing.
@@ -90,7 +89,26 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
    & $aws apprunner resume-service --service-arn $arn --region us-east-1
    ```
 
-   **To ship a code change** (manual until GitHub Actions is wired up):
+   **To ship a code change:** merge to `main`. The `push-image` job in
+   `.github/workflows/ci.yml` runs after the test/coverage job, builds the image, and
+   pushes `:latest` (plus a short-SHA tag for rollbacks) to ECR. App Runner auto-redeploys
+   *if the service is running* - it's paused by default, so a push while paused just
+   updates the image and deploys whenever you resume.
+
+   Auth is GitHub OIDC, no stored access keys:
+
+   | resource | name |
+   | --- | --- |
+   | OIDC provider | `token.actions.githubusercontent.com` |
+   | IAM role | `GitHubActionsECRPushRole` |
+   | inline policy | `ECRPushNotificationHub` (scoped to the one ECR repo) |
+
+   The role's trust policy only accepts `repo:TaDavid7/notification_hub:ref:refs/heads/main`.
+   Pushes from a branch or a fork PR cannot assume it - that's deliberate, but it means
+   renaming the default branch or moving the repo breaks the push job until the trust
+   policy is updated.
+
+   **Manual push** (fallback if Actions is down):
 
    ```powershell
    $repo = "906048429586.dkr.ecr.us-east-1.amazonaws.com/notification-hub"
