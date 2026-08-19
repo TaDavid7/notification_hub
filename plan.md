@@ -64,18 +64,21 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
    without a NAT Gateway (~$32/month, more than everything else combined). Fix later with
    a NAT Gateway if this ever holds real data.
 
-   **Still deferred from this step:** webhook secrets live as plain App Runner env vars
-   rather than SSM. About 20 minutes.
+   Secrets now come from SSM rather than plaintext env vars - see the SSM table below.
 
    Budget roughly $10-25/month; App Runner bills for idle memory, so pause it when not
    demoing.
 
-   **Current state: everything is stopped.** App Runner is PAUSED, RDS is STOPPED.
-   Nothing is being billed except RDS storage (~$2/month for 20GB).
+   **Current state (19 Aug 2026): everything is stopped again.** App Runner PAUSED, RDS
+   stopped, after bringing both up to apply the SSM switch-over and verify the outbox in
+   production. Nothing is billed except RDS storage (~$2/month for 20GB).
 
-   > **RDS auto-starts after 7 days.** AWS will not leave an instance stopped
-   > indefinitely. Either stop it again, or snapshot and delete it if you're done for a
-   > while.
+   > **RDS auto-starts after 7 days - so around 26 Aug 2026.** AWS will not leave an
+   > instance stopped indefinitely. Either stop it again, or snapshot and delete it if
+   > you're done for a while.
+
+   Note that App Runner refuses `update-service` while PAUSED
+   (`InvalidStateException`), so any config change means resuming first.
 
    **To bring it back up** (RDS first - App Runner health-checks the database):
 
@@ -170,14 +173,17 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
   in `application.yml`.
 
   Because the claim query uses `SKIP LOCKED`, the dispatcher is already safe to run on
-  several instances - so the Redis/ShedLock item below only needs to cover `CanvasPoller`,
+  several instances - so the Redis/ShedLock item above only needs to cover `CanvasPoller`,
   not this loop.
 
-**Deferred (not dropped)**
+  **Verified in production**, not just in tests: `POST` returned 202/QUEUED, and the row
+  reached SENT on attempt 1 using the webhook read from SSM. Before that, the same run
+  locally against real Discord and Slack returned `Discord OK 200` and `SLACK_DELIVERED`,
+  with `V6` applying as an upgrade over an existing V1-V5 schema rather than a fresh
+  create.
 
-- **Finish the SSM switch-over.** The parameters and the IAM role exist; App Runner is
-  still reading plaintext env vars because `update-service` refuses to run against a
-  PAUSED service:
+- ~~**Secrets in SSM.**~~ App Runner reads all three secrets from encrypted Parameter
+  Store; only `DB_URL` and `DB_USERNAME` remain plaintext, and neither is a secret.
 
   | resource | name |
   | --- | --- |
@@ -186,54 +192,42 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
   | SSM (SecureString) | `/notification-hub/db-password` |
   | IAM role | `AppRunnerInstanceRole` + inline `ReadNotificationHubSecrets` |
 
-  To finish, resume the service first (RDS, then App Runner - see above), then move the
-  three values from `RuntimeEnvironmentVariables` to `RuntimeEnvironmentSecrets` and
-  attach the instance role. `DB_URL` and `DB_USERNAME` stay as plain env vars.
+  Both webhook URLs were rotated at the same time, since the originals had been read out
+  of the App Runner config in plaintext. To rotate again: regenerate in Discord/Slack,
+  then `aws ssm put-parameter --overwrite`; the service needs no change, but it does need
+  a restart to pick up the new value.
 
-  ```powershell
-  # DB_URL is read back from the service so the endpoint isn't written down here
-  $arn = "arn:aws:apprunner:us-east-1:906048429586:service/notification-hub/0a14f321bf4040e691c21f91716637e2"
-  $dbUrl = (& $aws apprunner describe-service --service-arn $arn --region us-east-1 `
-      --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables.DB_URL' `
-      --output text)
+  If you ever rebuild the service config by hand, pass `Cpu`/`Memory` explicitly -
+  omitting `InstanceConfiguration` fields resets them to App Runner defaults.
 
-  $p = "arn:aws:ssm:us-east-1:906048429586:parameter/notification-hub"
-  $cfg = @{
-    ServiceArn = $arn
-    SourceConfiguration = @{
-      ImageRepository = @{
-        ImageIdentifier = "906048429586.dkr.ecr.us-east-1.amazonaws.com/notification-hub:latest"
-        ImageRepositoryType = "ECR"
-        ImageConfiguration = @{
-          Port = "8080"
-          RuntimeEnvironmentVariables = @{ DB_URL = $dbUrl; DB_USERNAME = "postgres" }
-          RuntimeEnvironmentSecrets = @{
-            DB_PASSWORD         = "$p/db-password"
-            DISCORD_WEBHOOK_URL = "$p/discord-webhook-url"
-            SLACK_WEBHOOK_URL   = "$p/slack-webhook-url"
-          }
-        }
-      }
-      AutoDeploymentsEnabled = $true
-      AuthenticationConfiguration = @{ AccessRoleArn = "arn:aws:iam::906048429586:role/AppRunnerECRAccessRole" }
-    }
-    InstanceConfiguration = @{
-      Cpu = "1024"; Memory = "2048"
-      InstanceRoleArn = "arn:aws:iam::906048429586:role/AppRunnerInstanceRole"
-    }
-  }
-  $cfg | ConvertTo-Json -Depth 10 | Out-File -Encoding utf8 update.json
-  & $aws apprunner update-service --region us-east-1 --cli-input-json file://update.json
-  ```
+**Deferred (not dropped)**
 
-  Passing `Cpu`/`Memory` explicitly is not optional - omitting `InstanceConfiguration`
-  fields resets them to the App Runner defaults.
+- **Test the HTTP senders.** `DiscordSender` is the least-covered class in the repo (9%)
+  and contains the retry/`Retry-After` parsing, which is exactly the logic worth having
+  tests around. `SlackSender` is at 20%. Needs a stubbed HTTP server (WireMock or OkHttp's
+  `MockWebServer`) so a test can play Discord returning 429 or 500. This is the one thing
+  standing between the coverage gate and a number above `0.50` - do it before raising the
+  gate, not after.
 
-  **Rotate the webhook URLs when convenient.** Both were read out of the App Runner config
-  in plaintext while setting this up, so they've been on a terminal. Regenerate them in
-  Discord and Slack, then `aws ssm put-parameter --overwrite`; nothing else changes once
-  the service reads from SSM.
+- **Legacy `FAILED` rows.** Production still holds at least one row with status `FAILED`
+  from the pre-outbox design (`id=1`, created 18 Aug). `FAILED` is not part of the new
+  lifecycle and the dispatcher only claims `QUEUED`/`RETRY`, so it will sit there forever.
+  Harmless as history. If you'd rather they got one attempt under the new system, that's a
+  one-line `V7`:
+  `UPDATE notification_requests SET status='RETRY', next_attempt_at=now() WHERE status='FAILED';`
 
-- **Test the HTTP senders.** DiscordSender is the least-covered class in the repo (9%) and
-  contains the retry/`Retry-After` parsing, which is exactly the logic worth having tests
-  around. Needs a stubbed HTTP server. Raise the coverage gate afterwards.
+- **Canvas poller has no tests.** It sits at 24% and is the only component never exercised
+  end to end - the local and production verification both went through the REST API, not a
+  real Canvas poll. `fetchAllPages` pagination and `parseNext`'s Link-header regex are pure
+  functions and easy to test; the polling itself needs a stubbed Canvas.
+
+- **Rollback is manual.** Images are tagged with the short SHA, so rolling back is
+  possible, but it means editing the App Runner image tag by hand. Worth a documented
+  one-liner if this ever matters.
+
+**Not started (and fine)**
+
+- **NAT Gateway.** See the known tradeoff above - RDS stays publicly reachable until this
+  holds data worth protecting.
+- **JWT security**, event-driven notifications, and per-channel message formatting, all
+  from the README's future-improvements list. Nothing above blocks them.
