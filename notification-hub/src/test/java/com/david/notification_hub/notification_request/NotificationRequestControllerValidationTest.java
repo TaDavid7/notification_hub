@@ -3,8 +3,7 @@ package com.david.notification_hub.notification_request;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 
 
@@ -28,10 +27,10 @@ class NotificationRequestControllerValidationTest {
     @Autowired
     private MockMvc mvc;
 
-    @MockBean
+    @MockitoBean
     private NotificationIntakeService intake;
 
-    @MockBean
+    @MockitoBean
     NotificationRequestRepository notificationRequestRepository;
 
     private static final String VALID_JSON = """

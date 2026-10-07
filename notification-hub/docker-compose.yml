@@ -33,7 +33,7 @@ services:
       CANVAS_TOKEN: ${CANVAS_TOKEN:-}
       CANVAS_COURSE_IDS: ${CANVAS_COURSE_IDS:-}
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8080}:8080"
 
 volumes:
   pgdata:

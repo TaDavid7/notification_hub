@@ -231,3 +231,22 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
   holds data worth protecting.
 - **JWT security**, event-driven notifications, and per-channel message formatting, all
   from the README's future-improvements list. Nothing above blocks them.
+
+Examples
+
+cd "C:\Users\dtani\Documents\2026 Projects\notificationhub\notification_hub\notification-hub"
+docker compose up --build
+
+check http://localhost:8080/actuator/health
+$n = @{
+title = "Midterm moved to Friday"
+body = "[announcement] Midterm moved to
+Friday`nhttps://canvas.example.edu/courses/1/announcements/42"
+    priority = "normal"; channel = "DISCORD"
+    externalSource = "canvas:announcement"; externalId = "42"
+  }
+  Invoke-RestMethod -Method Post -Uri http://localhost:8080/api/notifications `
+-ContentType "application/json" -Body ($n | ConvertTo-Json)
+
+docker compose down
+
