@@ -47,6 +47,13 @@ notifications:
     delayMs: 60000
     initialDelayMs: 60000
 
+alerts:
+  reminders:
+    delayMs: 900000            # a pass every 15 minutes
+    initialDelayMs: 60000
+    startingSoonHours: 24      # remind this long before an event starts
+    onSaleSoonMinutes: 60      # and this long before tickets go on sale
+
 ticketmaster:
   apiKey: ${TICKETMASTER_API_KEY:}
   baseUrl: https://app.ticketmaster.com/discovery/v2

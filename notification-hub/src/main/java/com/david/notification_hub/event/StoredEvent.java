@@ -55,6 +55,11 @@ public class StoredEvent {
     @Column(name = "content_hash", nullable = false)
     private String contentHash;
 
+    // How many times content_hash has changed. Not a JPA @Version: that would also count
+    // title-only saves, and this is part of each update alert's outbox key.
+    @Column(name = "revision", nullable = false)
+    private int revision = 0;
+
     @Column(name = "first_seen_at", nullable = false)
     private OffsetDateTime firstSeenAt;
 
@@ -108,6 +113,9 @@ public class StoredEvent {
 
     public String getContentHash() { return contentHash; }
     public void setContentHash(String contentHash) { this.contentHash = contentHash; }
+
+    public int getRevision() { return revision; }
+    public void setRevision(int revision) { this.revision = revision; }
 
     public OffsetDateTime getFirstSeenAt() { return firstSeenAt; }
 

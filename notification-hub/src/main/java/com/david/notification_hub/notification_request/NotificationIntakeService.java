@@ -96,6 +96,25 @@ public class NotificationIntakeService {
         }
     }
 
+    /**
+     * Enqueues inside the caller's transaction, for a producer whose notification has to
+     * commit or roll back together with the change it reports. Unlike {@link #enqueue}, a
+     * duplicate is not an exception and does not poison that transaction.
+     *
+     * Runs in a transaction of its own when there is none to join.
+     *
+     * @return true if a row was written, false if this key was already enqueued
+     */
+    public boolean enqueueIfAbsent(String title,
+                                   String body,
+                                   String channel,
+                                   String externalSource,
+                                   String externalId,
+                                   Long userId) {
+        String ch = blankTo(channel, "DISCORD").toUpperCase(Locale.ROOT);
+        return repo.insertIfAbsent(title, body, ch, externalSource, externalId, userId, OffsetDateTime.now()) == 1;
+    }
+
     private static String blankTo(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value;
     }

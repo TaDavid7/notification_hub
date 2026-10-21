@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -55,6 +56,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
     @Autowired NotificationRequestRepository requestRepo;
     @Autowired DeliveryLogRepository logRepo;
     @Autowired UserRepository userRepo;
+    @Autowired TransactionTemplate tx;
 
     @MockitoBean SendRouter router;
 
@@ -119,6 +121,34 @@ class OutboxDispatchTest extends AbstractPostgresTest {
         assertEquals(aliceFirst.request().getId(), aliceAgain.request().getId(),
                 "a repeat must hand back that user's row, not the other user's");
         assertEquals(2, requestRepo.count());
+    }
+
+    @Test
+    void enqueueIfAbsentSkipsADuplicateWithoutBreakingTheCallersTransaction() {
+        long alice = newUser();
+
+        // In Postgres a failed statement aborts the whole transaction, so if the duplicate
+        // threw, the third insert would fail too
+        List<Boolean> written = tx.execute(status -> List.of(
+                intake.enqueueIfAbsent("title", "body", "DISCORD", "test:item", "ifabsent-1", alice),
+                intake.enqueueIfAbsent("title", "body", "DISCORD", "test:item", "ifabsent-1", alice),
+                intake.enqueueIfAbsent("title", "body", "DISCORD", "test:item", "ifabsent-2", alice)));
+
+        assertEquals(List.of(true, false, true), written);
+        assertEquals(2, requestRepo.count());
+    }
+
+    @Test
+    void aRowEnqueuedIfAbsentIsPickedUpLikeAnyOther() {
+        when(router.send(any(), any(), any(), any(), anyBoolean())).thenReturn(SendResult.ok("ok"));
+        long alice = newUser();
+
+        intake.enqueueIfAbsent("title", "body", "DISCORD", "test:item", "ifabsent-3", alice);
+        dispatcher.dispatchDue();
+
+        NotificationRequest sent = requestRepo.findAll().get(0);
+        assertEquals(NotificationStatus.SENT, sent.getStatus());
+        assertEquals(alice, sent.getUserId());
     }
 
     @Test
