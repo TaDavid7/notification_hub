@@ -1,8 +1,10 @@
 package com.david.notification_hub.notification_request;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -16,6 +18,33 @@ public interface NotificationRequestRepository extends JpaRepository<Notificatio
      */
     Optional<NotificationRequest> findByExternalSourceAndExternalIdAndChannelAndUserId(
             String externalSource, String externalId, String channel, Long userId);
+
+    /**
+     * Writes a due QUEUED row unless its dedupe key is already taken.
+     *
+     * ON CONFLICT DO NOTHING rather than letting the unique index throw: in Postgres a
+     * failed statement aborts the whole surrounding transaction, and the caller's
+     * transaction also holds the change this notification reports.
+     *
+     * @return 1 if the row was written, 0 if the key already existed
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            INSERT INTO notification_requests
+                   (title, body, priority, status, channel, external_source, external_id, user_id,
+                    attempts, next_attempt_at, created_at)
+            VALUES (:title, :body, 'NORMAL', 'QUEUED', :channel, :externalSource, :externalId, :userId,
+                    0, :now, :now)
+            ON CONFLICT DO NOTHING
+            """, nativeQuery = true)
+    int insertIfAbsent(@Param("title") String title,
+                       @Param("body") String body,
+                       @Param("channel") String channel,
+                       @Param("externalSource") String externalSource,
+                       @Param("externalId") String externalId,
+                       @Param("userId") Long userId,
+                       @Param("now") OffsetDateTime now);
 
     /**
      * Claims a batch of due outbox rows.
