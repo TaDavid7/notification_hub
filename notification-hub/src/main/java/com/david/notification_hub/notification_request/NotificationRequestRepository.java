@@ -17,8 +17,7 @@ public interface NotificationRequestRepository extends JpaRepository<Notificatio
      * {@code FOR UPDATE SKIP LOCKED} is what makes this safe to run on more than one
      * instance: each dispatcher locks the rows it takes and simply steps over rows
      * another instance already holds, instead of blocking or double-sending. That is
-     * also why the Redis/ShedLock item in plan.md is only needed for CanvasPoller and
-     * not for this loop.
+     * also why this loop needs no ShedLock-style leader election.
      *
      * Must be called inside a transaction - the locks live until it commits.
      */

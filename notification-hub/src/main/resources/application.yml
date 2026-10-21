@@ -40,13 +40,3 @@ notifications:
   reaper:
     delayMs: 60000
     initialDelayMs: 60000
-
-canvas:
-  baseUrl: ${CANVAS_BASE_URL:}
-  token: ${CANVAS_TOKEN:}
-  # Comma-separated course ids, e.g. "12345,67890". Must be a scalar, not a
-  # YAML list: Spring flattens lists to canvas.courseIds[0] and @Value cannot
-  # resolve that key.
-  courseIds: ${CANVAS_COURSE_IDS:}
-  pollDelayMs: 86400000      # once a day
-  initialDelayMs: 5000              # 5 seconds on startup

@@ -60,7 +60,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
     }
 
     private NotificationRequest enqueue(String externalId, String channel) {
-        return intake.enqueue("title", "body", "NORMAL", channel, "canvas:test", externalId).request();
+        return intake.enqueue("title", "body", "NORMAL", channel, "test:item", externalId).request();
     }
 
     private NotificationRequest reload(long id) {
@@ -84,7 +84,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
     void enqueueingTheSameItemTwiceReturnsTheFirstRow() {
         NotificationRequest first = enqueue("dup-1", "DISCORD");
         NotificationIntakeService.Result second =
-                intake.enqueue("title", "body", "NORMAL", "DISCORD", "canvas:test", "dup-1");
+                intake.enqueue("title", "body", "NORMAL", "DISCORD", "test:item", "dup-1");
 
         assertTrue(second.duplicate());
         assertEquals(first.getId(), second.request().getId());

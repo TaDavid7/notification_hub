@@ -42,7 +42,7 @@ public class NotificationRequest {
 
     @NotBlank
     @Column(name = "external_id", nullable = false)
-    private String externalId;     // e.g., Canvas item id as string
+    private String externalId;     // the producer's own id for the item, as a string
 
     // --- outbox bookkeeping (V6) ---
 
