@@ -44,6 +44,11 @@ public class NotificationRequest {
     @Column(name = "external_id", nullable = false)
     private String externalId;     // the producer's own id for the item, as a string
 
+    // The subscriber this alert is for. Null for anything posted through the REST API.
+    // Part of the dedupe key since V8, so one event alerting two subscribers is two rows.
+    @Column(name = "user_id")
+    private Long userId;
+
     // --- outbox bookkeeping (V6) ---
 
     @Column(name = "attempts", nullable = false)
@@ -99,6 +104,9 @@ public class NotificationRequest {
 
     public String getExternalId(){return externalId;}
     public void setExternalId(String externalId){this.externalId = externalId;}
+
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
 
     public int getAttempts() { return attempts; }
     public void setAttempts(int attempts) { this.attempts = attempts; }

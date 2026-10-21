@@ -9,20 +9,25 @@ import com.david.notification_hub.notification_request.NotificationStatus;
 import com.david.notification_hub.notify.SendResult;
 import com.david.notification_hub.notify.SendRouter;
 import com.david.notification_hub.support.AbstractPostgresTest;
+import com.david.notification_hub.user.User;
+import com.david.notification_hub.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -49,6 +54,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
     @Autowired OutboxStore store;
     @Autowired NotificationRequestRepository requestRepo;
     @Autowired DeliveryLogRepository logRepo;
+    @Autowired UserRepository userRepo;
 
     @MockitoBean SendRouter router;
 
@@ -65,6 +71,12 @@ class OutboxDispatchTest extends AbstractPostgresTest {
 
     private NotificationRequest reload(long id) {
         return requestRepo.findById(id).orElseThrow();
+    }
+
+    private long newUser() {
+        User u = new User();
+        u.setExternalId("discord-" + UUID.randomUUID());
+        return userRepo.save(u).getId();
     }
 
     // ---------- intake ----------
@@ -89,6 +101,32 @@ class OutboxDispatchTest extends AbstractPostgresTest {
         assertTrue(second.duplicate());
         assertEquals(first.getId(), second.request().getId());
         assertEquals(1, requestRepo.count(), "the duplicate must not create a second row");
+    }
+
+    @Test
+    void theSameItemForTwoUsersIsTwoNotificationsButRepeatsPerUserAreNot() {
+        long alice = newUser();
+        long bob = newUser();
+
+        var aliceFirst = intake.enqueue("title", "body", "NORMAL", "DISCORD", "test:item", "multi-1", alice);
+        var bobFirst = intake.enqueue("title", "body", "NORMAL", "DISCORD", "test:item", "multi-1", bob);
+        var aliceAgain = intake.enqueue("title", "body", "NORMAL", "DISCORD", "test:item", "multi-1", alice);
+
+        assertFalse(aliceFirst.duplicate());
+        assertFalse(bobFirst.duplicate());
+        assertEquals(alice, aliceFirst.request().getUserId());
+        assertTrue(aliceAgain.duplicate());
+        assertEquals(aliceFirst.request().getId(), aliceAgain.request().getId(),
+                "a repeat must hand back that user's row, not the other user's");
+        assertEquals(2, requestRepo.count());
+    }
+
+    @Test
+    void anUnknownUserIsAnErrorNotADuplicate() {
+        // The foreign key fails the same way the unique index does; it must not be
+        // mistaken for the idempotent case and swallowed
+        assertThrows(DataIntegrityViolationException.class,
+                () -> intake.enqueue("title", "body", "NORMAL", "DISCORD", "test:item", "ghost-1", -1L));
     }
 
     // ---------- happy path ----------
