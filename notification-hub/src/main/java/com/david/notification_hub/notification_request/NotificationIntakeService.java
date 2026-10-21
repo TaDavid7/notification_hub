@@ -12,10 +12,9 @@ import java.util.Optional;
 /**
  * The one way a notification enters the outbox.
  *
- * Both the REST controller and {@code CanvasPoller} come through here. The poller
- * used to call {@code NotificationRequestController.create(...)} directly, which
- * meant a scheduled job was constructing DTOs and interpreting ResponseEntity
- * status codes to decide whether its own write had worked.
+ * Every producer comes through here, the REST controller included. A scheduled job
+ * should call this rather than the controller, so it never has to construct DTOs or
+ * interpret ResponseEntity status codes to decide whether its own write had worked.
  *
  * Enqueueing only writes the row. Nothing is sent on this thread - the dispatcher
  * picks it up. That is what keeps a slow webhook out of the request path.
@@ -66,7 +65,7 @@ public class NotificationIntakeService {
         try {
             return new Result(repo.saveAndFlush(r), false);
         } catch (DataIntegrityViolationException dup) {
-            // Unique index hit -> this Canvas item was already enqueued for this
+            // Unique index hit -> this source item was already enqueued for this
             // channel. Idempotent success: hand back the row that won.
             Optional<NotificationRequest> existing =
                     repo.findByExternalSourceAndExternalIdAndChannel(externalSource, externalId, ch);

@@ -28,7 +28,7 @@ public class NotificationRequestController {
         @NotBlank public String body;
         public String priority;        // NORMAL | HIGH (default NORMAL)
         public String channel;         // DISCORD | SLACK (default DISCORD)
-        @NotBlank public String externalSource;  // e.g., "canvas:announcement"
+        @NotBlank public String externalSource;  // e.g., "manual"
         @NotBlank public String externalId;      // e.g., "123456"
     }
 

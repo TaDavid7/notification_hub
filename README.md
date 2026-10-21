@@ -31,11 +31,6 @@ file is gitignored, so your secrets never get committed:
 ```ini
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
-
-# Optional - only needed for the Canvas poller
-CANVAS_BASE_URL=https://yourschool.instructure.com
-CANVAS_TOKEN=...
-CANVAS_COURSE_IDS=12345,67890
 ```
 
 ### Run

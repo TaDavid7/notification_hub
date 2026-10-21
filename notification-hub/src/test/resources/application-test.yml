@@ -13,12 +13,6 @@ logging:
   level:
     org.hibernate.SQL: warn
 
-# Leave Canvas unset so the poller stays disabled and tests make no outbound calls
-canvas:
-  baseUrl: ""
-  token: ""
-  courseIds: ""
-
 # Park the background dispatcher far enough out that it never fires during a test
 # run. Tests that care about dispatch behaviour call the methods directly, so a
 # timer racing them would only make results non-deterministic.

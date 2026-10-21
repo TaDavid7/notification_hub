@@ -31,7 +31,7 @@ class NotificationRequestIdempotencyTest extends AbstractPostgresTest {
         r.setPriority("NORMAL");
         r.setChannel(channel);
         r.setStatus("QUEUED");
-        r.setExternalSource("canvas:announcement");
+        r.setExternalSource("test:item");
         r.setExternalId(externalId);
         return r;
     }
@@ -47,14 +47,14 @@ class NotificationRequestIdempotencyTest extends AbstractPostgresTest {
 
     @Test
     void sameSourceIdOnDifferentChannelIsAllowed() {
-        // The index includes channel, so one Canvas item can fan out to both
+        // The index includes channel, so one source item can fan out to both
         repo.saveAndFlush(request("fanout-1", "DISCORD"));
         repo.saveAndFlush(request("fanout-1", "SLACK"));
 
         assertTrue(repo.findByExternalSourceAndExternalIdAndChannel(
-                "canvas:announcement", "fanout-1", "DISCORD").isPresent());
+                "test:item", "fanout-1", "DISCORD").isPresent());
         assertTrue(repo.findByExternalSourceAndExternalIdAndChannel(
-                "canvas:announcement", "fanout-1", "SLACK").isPresent());
+                "test:item", "fanout-1", "SLACK").isPresent());
     }
 
     @Test
@@ -63,7 +63,7 @@ class NotificationRequestIdempotencyTest extends AbstractPostgresTest {
 
         // Mirrors the recovery path in NotificationRequestController.create
         NotificationRequest found = repo.findByExternalSourceAndExternalIdAndChannel(
-                "canvas:announcement", "lookup-1", "SLACK").orElseThrow();
+                "test:item", "lookup-1", "SLACK").orElseThrow();
 
         assertEquals(saved.getId(), found.getId());
         assertNotNull(found.getCreatedAt());

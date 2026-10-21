@@ -16,7 +16,6 @@ Spring Boot Actuator - Adds a health check url. Hit /actuator/health and get up 
 flyware-core + flyway-database-postgresql - manages database structure
 postgresql - translator between java and postgres
 springdoc-openapi - webpage documentation at /swagger-ui.html
-starter-webflux - could be replaced, just using WebClient
 starter-test - test framework, mock libary, fake HTTP requests
 testcontainers (junit-jupiter + postgresql) - spins up a real postgres:15 in tests, replaced h2
 junit-platform-launcher - lets gradle run
@@ -130,13 +129,19 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
    - The DB master password is in the session scratchpad, not the repo. If it's lost,
      reset it with `aws rds modify-db-instance --master-user-password`.
 
-2. **Redis (ElastiCache), once max instances goes above 1.** Two jobs: ShedLock around
-   `CanvasPoller.tick()` so only one instance polls - this is what unblocks scaling - and
-   a shared token bucket so instances don't each get a full rate-limit budget against
-   Discord and Slack. Worthless at one instance, so don't provision it early.
+2. **Redis (ElastiCache), once max instances goes above 1.** A shared token bucket so
+   instances don't each get a full rate-limit budget against Discord and Slack. (It used
+   to also cover ShedLock around the Canvas poller; Canvas has since been removed.)
+   Worthless at one instance, so don't provision it early.
    Also needed before scaling: move Flyway out of app startup into a one-off task.
 
 **Done since the deploy**
+
+- ~~**Remove Canvas.**~~ First step of the Pingr rework. `CanvasPoller`, its config and
+  env vars, and `spring-boot-starter-webflux` (only the poller used `WebClient`) are gone.
+  `V7__remove_canvas.sql` deletes every `canvas:*` row from `notification_requests`, with
+  their `delivery_logs` cascading - this runs against production on the next deploy and
+  cannot be undone.
 
 - ~~**Repo cleanup.**~~ Coverage gate now reads `0.50`, which is a real ratchet just under
   actual line coverage rather than `0.05` wearing a `// 90%` comment. CanvasPoller logs
@@ -173,8 +178,7 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
   in `application.yml`.
 
   Because the claim query uses `SKIP LOCKED`, the dispatcher is already safe to run on
-  several instances - so the Redis/ShedLock item above only needs to cover `CanvasPoller`,
-  not this loop.
+  several instances without a lock.
 
   **Verified in production**, not just in tests: `POST` returned 202/QUEUED, and the row
   reached SENT on attempt 1 using the webhook read from SSM. Before that, the same run
@@ -216,11 +220,6 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
   one-line `V7`:
   `UPDATE notification_requests SET status='RETRY', next_attempt_at=now() WHERE status='FAILED';`
 
-- **Canvas poller has no tests.** It sits at 24% and is the only component never exercised
-  end to end - the local and production verification both went through the REST API, not a
-  real Canvas poll. `fetchAllPages` pagination and `parseNext`'s Link-header regex are pure
-  functions and easy to test; the polling itself needs a stubbed Canvas.
-
 - **Rollback is manual.** Images are tagged with the short SHA, so rolling back is
   possible, but it means editing the App Runner image tag by hand. Worth a documented
   one-liner if this ever matters.
@@ -239,11 +238,10 @@ docker compose up --build
 
 check http://localhost:8080/actuator/health
 $n = @{
-title = "Midterm moved to Friday"
-body = "[announcement] Midterm moved to
-Friday`nhttps://canvas.example.edu/courses/1/announcements/42"
+title = "Test alert"
+body = "Hello from the API"
     priority = "normal"; channel = "DISCORD"
-    externalSource = "canvas:announcement"; externalId = "42"
+    externalSource = "manual"; externalId = "42"
   }
   Invoke-RestMethod -Method Post -Uri http://localhost:8080/api/notifications `
 -ContentType "application/json" -Body ($n | ConvertTo-Json)

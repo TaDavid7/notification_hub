@@ -39,7 +39,7 @@ class NotificationRequestControllerValidationTest {
       "body": "World",
       "channel": "DISCORD",
       "priority": "HIGH",
-      "externalSource": "canvas:announcement",
+      "externalSource": "test:item",
       "externalId": "12345"
     }
     """;
