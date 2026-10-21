@@ -28,6 +28,12 @@ management:
 
 discord:
   webhookUrl: ${DISCORD_WEBHOOK_URL:}
+  # Slash commands. All from the application's page in the Discord developer portal.
+  applicationId: ${DISCORD_APPLICATION_ID:}
+  publicKey: ${DISCORD_PUBLIC_KEY:}       # verifies requests to /discord/interactions
+  botToken: ${DISCORD_BOT_TOKEN:}         # only used to register the commands
+  guildId: ${DISCORD_GUILD_ID:}           # optional: register to one server, where changes show at once
+  apiBaseUrl: https://discord.com/api/v10
 
 slack:
   webhookUrl: ${SLACK_WEBHOOK_URL:}
@@ -48,6 +54,8 @@ notifications:
     initialDelayMs: 60000
 
 alerts:
+  # Each distinct subscription is its own poll against a rate-limited API
+  maxFeedsPerUser: 10
   reminders:
     delayMs: 900000            # a pass every 15 minutes
     initialDelayMs: 60000
