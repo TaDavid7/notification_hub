@@ -13,9 +13,9 @@ logging:
   level:
     org.hibernate.SQL: warn
 
-# Park the background dispatcher and reminder job far enough out that they never fire
-# during a test run. Tests that care about either call the methods directly, so a
-# timer racing them would only make results non-deterministic.
+# Park the background dispatcher, reminder job and poller far enough out that they never
+# fire during a test run. Tests that care about any of them call the methods directly,
+# so a timer racing them would only make results non-deterministic.
 notifications:
   dispatch:
     initialDelayMs: 86400000
@@ -28,3 +28,7 @@ alerts:
   reminders:
     initialDelayMs: 86400000
     delayMs: 86400000
+
+polling:
+  initialDelayMs: 86400000
+  delayMs: 86400000

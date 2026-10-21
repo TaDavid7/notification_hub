@@ -55,6 +55,11 @@ public class SourceRegistry {
         }
     }
 
+    /** The types that have a source - the only ones worth polling. */
+    public Set<SourceType> types() {
+        return byType.keySet();
+    }
+
     /** @throws IllegalArgumentException if no source serves this type */
     public Source get(SourceType type) {
         Source source = byType.get(type);

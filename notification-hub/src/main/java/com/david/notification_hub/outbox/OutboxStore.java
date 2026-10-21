@@ -6,6 +6,7 @@ import com.david.notification_hub.notification_request.NotificationRequest;
 import com.david.notification_hub.notification_request.NotificationRequestRepository;
 import com.david.notification_hub.notification_request.NotificationStatus;
 import com.david.notification_hub.notify.SendResult;
+import com.david.notification_hub.retry.Backoff;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -15,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Every database transaction the dispatcher needs, and nothing else.
@@ -140,18 +140,11 @@ public class OutboxStore {
     }
 
     /**
-     * Exponential backoff with jitter: base * 2^(attempt-1), capped, then randomised
-     * across [50%, 100%]. The jitter matters because a Discord outage fails every row in
-     * the batch at once - without it they would all come back in the same instant.
+     * Exponential backoff with jitter; see {@link Backoff#exponential}. The jitter matters
+     * here because a Discord outage fails every row in the batch at once.
      */
     static Duration backoffFor(int attempt, Duration base, Duration max) {
-        long baseMs = base.toMillis();
-        int shift = Math.min(attempt - 1, 20); // 2^20 is already far past any sane cap
-        long scaled = baseMs << shift;
-        if (scaled <= 0 || scaled > max.toMillis()) scaled = max.toMillis();
-
-        long jittered = scaled / 2 + ThreadLocalRandom.current().nextLong(scaled / 2 + 1);
-        return Duration.ofMillis(jittered);
+        return Backoff.exponential(attempt, base, max);
     }
 
     private void writeLog(NotificationRequest r, int attempt, boolean succeeded, String response, String error) {

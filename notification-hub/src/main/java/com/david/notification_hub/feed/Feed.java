@@ -39,6 +39,12 @@ public class Feed {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+    // Set once the feed's first poll is done. Until then, what the source returns is
+    // what already existed when the user subscribed, and is summarised in one message
+    // rather than announced item by item.
+    @Column(name = "baselined_at")
+    private OffsetDateTime baselinedAt;
+
     public Feed() {}
 
     @PrePersist
@@ -58,4 +64,7 @@ public class Feed {
     public void setParams(Map<String, String> params) { this.params = params; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
+
+    public OffsetDateTime getBaselinedAt() { return baselinedAt; }
+    public void setBaselinedAt(OffsetDateTime baselinedAt) { this.baselinedAt = baselinedAt; }
 }

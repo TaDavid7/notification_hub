@@ -1,5 +1,6 @@
 package com.david.notification_hub.discord;
 
+import com.david.notification_hub.alert.Alerts;
 import com.david.notification_hub.feed.Feed;
 import com.david.notification_hub.feed.SubscriptionService;
 import com.david.notification_hub.geo.ZipCodes;
@@ -37,9 +38,6 @@ public class CommandHandler {
     static final List<String> GENRES = List.of(
             "Alternative", "Blues", "Classical", "Country", "Dance/Electronic", "Folk", "Hip-Hop/Rap",
             "Jazz", "Latin", "Metal", "Pop", "R&B", "Reggae", "Rock", "World");
-
-    // Kept in the params for /list to show; the source searches by the coordinates
-    static final String ZIP = "zip";
 
     private final SubscriptionService subscriptions;
     private final ZipCodes zipCodes;
@@ -90,10 +88,10 @@ public class CommandHandler {
         params.put(TicketmasterSource.RADIUS, String.valueOf(radius));
         params.put(TicketmasterSource.SEGMENT, "Music");
         if (genre != null) params.put(TicketmasterSource.CLASSIFICATION, genre);
-        params.put(ZIP, zip);
+        params.put(TicketmasterSource.ZIP, zip);
 
         return reply(subscriptions.subscribe(userId, SourceType.TICKETMASTER, params),
-                describe(SourceType.TICKETMASTER, params),
+                Alerts.describe(SourceType.TICKETMASTER, params),
                 "You'll be mentioned when shows are announced, change, or are about to start.");
     }
 
@@ -116,7 +114,7 @@ public class CommandHandler {
         params.put(CheapSharkSource.MAX_PRICE, price.toPlainString());
 
         return reply(subscriptions.subscribe(userId, SourceType.CHEAPSHARK, params),
-                describe(SourceType.CHEAPSHARK, params),
+                Alerts.describe(SourceType.CHEAPSHARK, params),
                 "You'll be mentioned when it's on sale for that or less.");
     }
 
@@ -126,7 +124,7 @@ public class CommandHandler {
 
         StringBuilder sb = new StringBuilder("Your subscriptions:");
         for (Feed f : feeds) {
-            sb.append("\n`#").append(f.getId()).append("` ").append(describe(f.getSourceType(), f.getParams()));
+            sb.append("\n`#").append(f.getId()).append("` ").append(Alerts.describe(f.getSourceType(), f.getParams()));
         }
         return sb.append("\nStop one with /unsubscribe and its number.").toString();
     }
@@ -146,20 +144,6 @@ public class CommandHandler {
             case CREATED -> "Subscribed (#" + result.feedId() + "): " + description + ". " + whatNext;
             case ALREADY_SUBSCRIBED -> "You're already subscribed to that (#" + result.feedId() + ").";
             case LIMIT_REACHED -> "You're at the limit of subscriptions. Stop one with /unsubscribe first.";
-        };
-    }
-
-    static String describe(SourceType type, Map<String, String> params) {
-        return switch (type) {
-            case TICKETMASTER -> {
-                String genre = params.get(TicketmasterSource.CLASSIFICATION);
-                yield "concerts within " + params.get(TicketmasterSource.RADIUS) + " mi of "
-                        + params.getOrDefault(ZIP, params.get(TicketmasterSource.LAT) + "," + params.get(TicketmasterSource.LON))
-                        + (genre == null ? "" : " · " + genre);
-            }
-            case CHEAPSHARK -> params.get(CheapSharkSource.TITLE) + " under $" + params.get(CheapSharkSource.MAX_PRICE);
-            // A source added later is still listed, just plainly, until it gets wording here
-            default -> type.name().toLowerCase(Locale.ROOT) + " " + params;
         };
     }
 

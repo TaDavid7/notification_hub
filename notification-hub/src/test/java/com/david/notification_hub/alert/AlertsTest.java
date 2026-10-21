@@ -1,12 +1,18 @@
 package com.david.notification_hub.alert;
 
 import com.david.notification_hub.event.StoredEvent;
+import com.david.notification_hub.feed.Feed;
+import com.david.notification_hub.source.Event;
 import com.david.notification_hub.source.EventStatus;
 import com.david.notification_hub.source.SourceType;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -190,7 +196,80 @@ class AlertsTest {
         assertTrue(Alerts.newEvent(e, ALICE).body().endsWith("\nhttps://example.com/a_b?x=1&y=2"));
     }
 
+    // ---------- first-poll summary ----------
+
+    @Test
+    void aSummaryOfManyShowsListsTheSoonestFive() {
+        List<Event> shows = new ArrayList<>();
+        for (int i = 7; i >= 1; i--) {   // deliberately latest first
+            shows.add(new Event(SourceType.TICKETMASTER, "tm-" + i, "Show " + i, STARTS.plusDays(i), null,
+                    "Venue " + i, null, "https://example.com/" + i, null));
+        }
+
+        Alert a = Alerts.baseline(concertFeed(), ALICE, shows);
+
+        assertEquals("ticketmaster", a.externalSource());
+        assertEquals("Now watching: concerts within 25 mi of 94110 · Rock", a.title());
+        List<String> lines = List.of(a.body().split("\n"));
+        assertEquals("<@" + ALICE + ">", lines.get(0));
+        assertEquals("7 shows right now, soonest first:", lines.get(1));
+        assertEquals(List.of("Show 1", "Show 2", "Show 3", "Show 4", "Show 5"),
+                lines.subList(2, 7).stream().map(l -> l.substring(2, l.indexOf(" — "))).toList());
+        assertEquals("• Show 1 — <t:" + STARTS.plusDays(1).toEpochSecond() + ":f> — Venue 1 — https://example.com/1",
+                lines.get(2));
+    }
+
+    @Test
+    void aSummaryOfDealsListsTheCheapestWithPrices() {
+        List<Event> deals = List.of(
+                new Event(SourceType.CHEAPSHARK, "2", "Hades II", null, null, null, new BigDecimal("19.99"), "https://d/2", null),
+                new Event(SourceType.CHEAPSHARK, "1", "Hades", null, null, null, new BigDecimal("9.99"), "https://d/1", null));
+
+        Alert a = Alerts.baseline(dealFeed(), ALICE, deals);
+
+        assertEquals("Now watching: hades under $20.00", a.title());
+        assertTrue(a.body().contains("2 deals right now:\n• Hades — $9.99 — https://d/1\n• Hades II — $19.99 — https://d/2"));
+    }
+
+    @Test
+    void aSummaryOfNothingSaysSo() {
+        Alert a = Alerts.baseline(dealFeed(), ALICE, List.of());
+
+        assertEquals("<@" + ALICE + ">\nNothing matches right now. You'll be mentioned when something does.", a.body());
+    }
+
+    @Test
+    void oneMatchIsSingular() {
+        Event one = new Event(SourceType.CHEAPSHARK, "1", "Hades", null, null, null, new BigDecimal("9.99"), null, null);
+
+        assertTrue(Alerts.baseline(dealFeed(), ALICE, List.of(one)).body().contains("1 deal right now:"));
+    }
+
+    @Test
+    void describesEachKindOfFeed() {
+        assertEquals("concerts within 25 mi of 94110 · Rock",
+                Alerts.describe(SourceType.TICKETMASTER, concertFeed().getParams()));
+        assertEquals("concerts within 10 mi of 10001",
+                Alerts.describe(SourceType.TICKETMASTER, Map.of("radius", "10", "zip", "10001", "lat", "1", "lon", "2")));
+        assertEquals("hades under $20.00", Alerts.describe(SourceType.CHEAPSHARK, dealFeed().getParams()));
+    }
+
     // ---------- helpers ----------
+
+    private static Feed concertFeed() {
+        Feed f = new Feed();
+        f.setSourceType(SourceType.TICKETMASTER);
+        f.setParams(new HashMap<>(Map.of("lat", "37.750021", "lon", "-122.415201", "radius", "25",
+                "segment", "Music", "classification", "Rock", "zip", "94110")));
+        return f;
+    }
+
+    private static Feed dealFeed() {
+        Feed f = new Feed();
+        f.setSourceType(SourceType.CHEAPSHARK);
+        f.setParams(new HashMap<>(Map.of("title", "hades", "maxPrice", "20.00")));
+        return f;
+    }
 
     private static String full(OffsetDateTime t) {
         return "<t:" + t.toEpochSecond() + ":F>";

@@ -1,15 +1,21 @@
 package com.david.notification_hub.alert;
 
 import com.david.notification_hub.event.StoredEvent;
+import com.david.notification_hub.feed.Feed;
+import com.david.notification_hub.source.Event;
 import com.david.notification_hub.source.EventStatus;
 import com.david.notification_hub.source.SourceType;
+import com.david.notification_hub.source.cheapshark.CheapSharkSource;
+import com.david.notification_hub.source.ticketmaster.TicketmasterSource;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -31,6 +37,9 @@ import java.util.Objects;
  * time zone. Text from a source is untrusted and goes through {@link #safe}.
  */
 public final class Alerts {
+
+    // How many existing matches a first-poll summary lists by name
+    static final int BASELINE_SHOWN = 5;
 
     private Alerts() {}
 
@@ -95,6 +104,57 @@ public final class Alerts {
                 "On sale soon: " + safe(e.getTitle()), lines);
     }
 
+    /**
+     * Sent once, after a feed's first poll, in place of a NEW alert for everything that
+     * already existed when the user subscribed - which for concerts near a city can be
+     * hundreds. Lists the first few, soonest or cheapest first.
+     *
+     * Keyed by the feed, so a retried first poll can't send it twice.
+     */
+    public static Alert baseline(Feed feed, String discordUserId, List<Event> matches) {
+        boolean deals = feed.getSourceType() == SourceType.CHEAPSHARK;
+        List<String> lines = new ArrayList<>();
+        lines.add(mention(discordUserId));
+
+        if (matches.isEmpty()) {
+            lines.add("Nothing matches right now. You'll be mentioned when something does.");
+        } else {
+            String order = deals ? "cheapest" : "soonest";
+            lines.add(count(matches.size(), feed.getSourceType()) + " right now"
+                    + (matches.size() > BASELINE_SHOWN ? ", " + order + " first:" : ":"));
+            matches.stream()
+                    .sorted(deals
+                            ? Comparator.comparing(Event::price, Comparator.nullsLast(Comparator.naturalOrder()))
+                            : Comparator.comparing(Event::startsAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                    .limit(BASELINE_SHOWN)
+                    .forEach(e -> lines.add("• " + listing(e, deals)));
+            lines.add(deals
+                    ? "You'll be mentioned when a new deal turns up or a price changes."
+                    : "You'll be mentioned when new shows are announced or these change.");
+        }
+
+        // The description repeats what the subscriber typed, into a shared channel
+        String what = safe(describe(feed.getSourceType(), feed.getParams()));
+        return new Alert(outboxSource(feed.getSourceType()), "feed-" + feed.getId() + ":baseline",
+                "Now watching: " + what, String.join("\n", lines));
+    }
+
+    /** How a feed reads to its owner: "concerts within 25 mi of 94110 · Rock", "hades under $20.00". */
+    public static String describe(SourceType type, Map<String, String> params) {
+        return switch (type) {
+            case TICKETMASTER -> {
+                String genre = params.get(TicketmasterSource.CLASSIFICATION);
+                String where = params.getOrDefault(TicketmasterSource.ZIP,
+                        params.get(TicketmasterSource.LAT) + "," + params.get(TicketmasterSource.LON));
+                yield "concerts within " + params.get(TicketmasterSource.RADIUS) + " mi of " + where
+                        + (genre == null ? "" : " · " + genre);
+            }
+            case CHEAPSHARK -> params.get(CheapSharkSource.TITLE) + " under $" + params.get(CheapSharkSource.MAX_PRICE);
+            // A source added later is still listed, just plainly, until it gets wording here
+            default -> type.name().toLowerCase(Locale.ROOT) + " " + params;
+        };
+    }
+
     /** The outbox's external_source for a source's alerts, e.g. "ticketmaster". */
     public static String outboxSource(SourceType source) {
         return source.name().toLowerCase(Locale.ROOT);
@@ -143,6 +203,28 @@ public final class Alerts {
 
     private static boolean isDeal(StoredEvent e) {
         return e.getSource() == SourceType.CHEAPSHARK;
+    }
+
+    // "Band Live — <time> — The Fillmore — url" or "Hades — $9.99 — url"
+    private static String listing(Event e, boolean deal) {
+        StringBuilder sb = new StringBuilder(safe(e.title()));
+        if (deal) {
+            sb.append(" — ").append(money(e.price()));
+        } else {
+            sb.append(" — ").append(e.startsAt() == null ? "TBA" : "<t:" + e.startsAt().toEpochSecond() + ":f>");
+            if (e.venue() != null) sb.append(" — ").append(safe(e.venue()));
+        }
+        if (e.url() != null) sb.append(" — ").append(e.url());
+        return sb.toString();
+    }
+
+    private static String count(int n, SourceType type) {
+        String noun = switch (type) {
+            case TICKETMASTER -> "show";
+            case CHEAPSHARK -> "deal";
+            default -> "match";
+        };
+        return n + " " + noun + (n == 1 ? "" : noun.endsWith("h") ? "es" : "s");
     }
 
     private static String mention(String discordUserId) {

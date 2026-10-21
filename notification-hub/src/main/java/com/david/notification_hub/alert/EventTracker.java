@@ -32,7 +32,8 @@ import java.util.Set;
  * <ul>
  *   <li>NEW goes to users whose feed is linked to the event for the first time. It is
  *       per user, not per event: two overlapping areas are two groups, and whichever
- *       polls second must still tell its own subscribers.</li>
+ *       polls second must still tell its own subscribers. A feed still on its first
+ *       poll is linked silently instead; {@link #finishBaseline} sums up for it.</li>
  *   <li>An UPDATE goes to everyone already following the event through any feed, not
  *       just the group whose poll noticed - the other groups will see no change when
  *       their turn comes.</li>
@@ -95,7 +96,16 @@ public class EventTracker {
 
         // Read before linking, so this is exactly the people who already knew of it
         Set<Long> followers = before == null ? Set.of() : followers(stored.getId());
-        Set<Long> newcomers = link(feeds, stored.getId());
+
+        Map<Long, Feed> feedById = new HashMap<>();
+        for (Feed f : feeds) feedById.put(f.getId(), f);
+        Set<Long> newcomers = new HashSet<>();
+        for (Long feedId : link(feedById.keySet(), stored.getId())) {
+            Feed f = feedById.get(feedId);
+            // Existing events found by a feed's first poll are what was already there when
+            // its owner subscribed: linked, so changes reach them, but not announced
+            if (f.getBaselinedAt() != null) newcomers.add(f.getUserId());
+        }
 
         Set<Long> everyone = new HashSet<>(followers);
         everyone.addAll(newcomers);
@@ -138,26 +148,40 @@ public class EventTracker {
     }
 
     /**
-     * Links the group's feeds to the event and returns the users of the feeds that were
-     * not linked before. The SELECT skips a feed deleted since the poll loaded it, which
-     * would otherwise fail its foreign key and take the whole event down with it.
+     * Ends a feed's first poll: one summary of what it found, and the feed marked so
+     * later polls announce new items individually. Both or neither, so a failure here
+     * just means the next poll tries the summary again.
+     *
+     * @param matches what the source returned on this poll
+     * @return how many outbox rows were written
      */
-    private Set<Long> link(List<Feed> feeds, long eventId) {
-        if (feeds.isEmpty()) return Set.of();
+    @Transactional
+    public int finishBaseline(Feed feed, List<Event> matches) {
+        String discordId = users.findById(feed.getUserId()).map(User::getExternalId).orElse(null);
+        int alerts = 0;
+        if (discordId != null) {
+            Alert summary = Alerts.baseline(feed, discordId, matches);
+            alerts = intake.enqueueIfAbsent(summary.title(), summary.body(), CHANNEL,
+                    summary.externalSource(), summary.externalId(), feed.getUserId()) ? 1 : 0;
+        }
+        jdbc.update("UPDATE feeds SET baselined_at = now() WHERE id = :id AND baselined_at IS NULL",
+                Map.of("id", feed.getId()));
+        return alerts;
+    }
 
-        Map<Long, Long> userByFeed = new HashMap<>();
-        for (Feed f : feeds) userByFeed.put(f.getId(), f.getUserId());
-
-        List<Long> linked = jdbc.queryForList("""
+    /**
+     * Links these feeds to the event and returns the ones that were not linked before.
+     * The SELECT skips a feed deleted since the poll loaded it, which would otherwise fail
+     * its foreign key and take the whole event down with it.
+     */
+    private List<Long> link(Set<Long> feedIds, long eventId) {
+        if (feedIds.isEmpty()) return List.of();
+        return jdbc.queryForList("""
                 INSERT INTO feed_events (feed_id, event_id)
                 SELECT f.id, :eventId FROM feeds f WHERE f.id IN (:feedIds)
                 ON CONFLICT DO NOTHING
                 RETURNING feed_id
-                """, Map.of("eventId", eventId, "feedIds", userByFeed.keySet()), Long.class);
-
-        Set<Long> userIds = new HashSet<>();
-        for (Long feedId : linked) userIds.add(userByFeed.get(feedId));
-        return userIds;
+                """, Map.of("eventId", eventId, "feedIds", feedIds), Long.class);
     }
 
     private Map<Long, String> discordIds(Set<Long> userIds) {
