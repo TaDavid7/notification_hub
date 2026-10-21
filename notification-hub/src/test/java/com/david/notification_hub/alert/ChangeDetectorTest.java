@@ -27,6 +27,8 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -69,7 +71,7 @@ class ChangeDetectorTest extends AbstractPostgresTest {
 
         Summary s = detector.apply(group("A", alice, bob), List.of(concert("49.50")));
 
-        assertEquals(new Summary(1, 1, 0, 2, 0), s);
+        assertEquals(new Summary(1, 1, 0, 2, 0, 0), s);
         assertEquals(List.of(id + ":new"), keysFor(alice));
         assertEquals(List.of(id + ":new"), keysFor(bob));
 
@@ -89,7 +91,7 @@ class ChangeDetectorTest extends AbstractPostgresTest {
         detector.apply(group, List.of(concert("49.50")));
         Summary again = detector.apply(group, List.of(concert("49.50")));
 
-        assertEquals(new Summary(1, 0, 0, 0, 0), again);
+        assertEquals(new Summary(1, 0, 0, 0, 0, 0), again);
         assertEquals(List.of(id + ":new"), keysFor(alice));
     }
 
@@ -114,7 +116,7 @@ class ChangeDetectorTest extends AbstractPostgresTest {
         detector.apply(group, List.of(concert("49.50")));
         Summary s = detector.apply(group, List.of(concert("39.50")));
 
-        assertEquals(new Summary(1, 0, 1, 2, 0), s);
+        assertEquals(new Summary(1, 0, 1, 2, 0, 0), s);
         assertEquals(List.of(id + ":new", id + ":r1"), keysFor(alice));
         assertEquals(List.of(id + ":new", id + ":r1"), keysFor(bob));
 
@@ -271,7 +273,101 @@ class ChangeDetectorTest extends AbstractPostgresTest {
         assertEquals(List.of(id + ":new", id + ":r1"), keysFor(alice));
     }
 
+    // ---------- a feed's first poll ----------
+
+    @Test
+    void aFeedsFirstPollIsOneSummaryNotAnAlertPerItem() {
+        User alice = newUser();
+        List<Feed> group = freshGroup("A", alice);
+        List<Event> alreadyOnSale = List.of(
+                concert(id + "-1", "40.00", STARTS), concert(id + "-2", "50.00", STARTS.plusDays(1)),
+                concert(id + "-3", "60.00", STARTS.plusDays(2)));
+
+        Summary s = detector.apply(group, alreadyOnSale);
+
+        assertEquals(1, s.baselined());
+        assertEquals(List.of("feed-" + group.get(0).getId() + ":baseline"), keysFor(alice));
+        assertTrue(((String) rowsFor(alice).get(0).get("body")).contains("3 shows right now"));
+        assertEquals(3, linksOf(group.get(0)), "linked, so changes and reminders still reach alice");
+        assertNotNull(baselinedAt(group.get(0)));
+    }
+
+    @Test
+    void afterTheFirstPollOnlyGenuinelyNewItemsAreAnnounced() {
+        User alice = newUser();
+        List<Feed> group = freshGroup("A", alice);
+        detector.apply(group, List.of(concert(id + "-1", "40.00", STARTS)));
+
+        // The poller reloads feeds every pass; this one is now past its first poll
+        List<Feed> reloaded = List.of(feeds.findById(group.get(0).getId()).orElseThrow());
+        detector.apply(reloaded, List.of(concert(id + "-1", "40.00", STARTS), concert(id + "-2", "50.00", STARTS)));
+
+        assertEquals(List.of("feed-" + group.get(0).getId() + ":baseline", id + "-2:new"), keysFor(alice));
+    }
+
+    @Test
+    void changesToWhatTheFirstPollFoundAreStillAnnounced() {
+        User alice = newUser();
+        List<Feed> group = freshGroup("A", alice);
+        detector.apply(group, List.of(concert(id + "-1", "40.00", STARTS)));
+
+        List<Feed> reloaded = List.of(feeds.findById(group.get(0).getId()).orElseThrow());
+        detector.apply(reloaded, List.of(concert(id + "-1", "30.00", STARTS)));
+
+        assertEquals(List.of("feed-" + group.get(0).getId() + ":baseline", id + "-1:r1"), keysFor(alice));
+    }
+
+    @Test
+    void aFirstPollThatFindsNothingStillFinishes() {
+        User alice = newUser();
+        List<Feed> group = freshGroup("A", alice);
+
+        detector.apply(group, List.of());
+
+        assertTrue(((String) rowsFor(alice).get(0).get("body")).contains("Nothing matches right now"));
+        assertNotNull(baselinedAt(group.get(0)), "or the next real item would be swallowed as baseline");
+    }
+
+    @Test
+    void aNewSubscriberToAQueryOthersAlreadyHaveGetsASummaryAndTheOthersNothing() {
+        User alice = newUser();
+        User bob = newUser();
+        Map<String, String> shared = new HashMap<>(Map.of("area", "shared-" + id));
+        Feed alicesFeed = feed(alice, shared, OffsetDateTime.now().minusDays(1));
+        detector.apply(List.of(alicesFeed), List.of(concert("49.50")));
+
+        Feed bobsFeed = feed(bob, shared, null);
+        detector.apply(List.of(alicesFeed, bobsFeed), List.of(concert("49.50")));
+
+        assertEquals(List.of(id + ":new"), keysFor(alice));
+        assertEquals(List.of("feed-" + bobsFeed.getId() + ":baseline"), keysFor(bob));
+    }
+
+    @Test
+    void theSummaryCannotBeUsedToPingTheChannel() {
+        // The summary repeats the subscription, which is what the user typed
+        User mallory = newUser();
+        Feed f = feed(mallory, new HashMap<>(Map.of("title", "@everyone", "maxPrice", "1.00")), null);
+        f.setSourceType(SourceType.CHEAPSHARK);
+        f = feeds.save(f);
+
+        detector.apply(List.of(f), List.of());
+
+        Map<String, Object> row = rowsFor(mallory).get(0);
+        assertFalse(((String) row.get("title")).contains("@everyone"));
+        assertFalse(((String) row.get("body")).contains("@everyone"));
+    }
+
     // ---------- helpers ----------
+
+    private Feed feed(User u, Map<String, String> params, OffsetDateTime baselinedAt) {
+        Feed f = new Feed();
+        f.setUserId(u.getId());
+        f.setSourceType(SourceType.TICKETMASTER);
+        f.setParams(params);
+        f.setBaselinedAt(baselinedAt);
+        return feeds.save(f);
+    }
 
     private Event concert(String price) {
         return concert(price, EventStatus.SCHEDULED, "Band Live");
@@ -289,8 +385,20 @@ class ChangeDetectorTest extends AbstractPostgresTest {
         return users.save(u);
     }
 
-    /** One feed per user, all with the same params - a group, as the poller will hand them over. */
+    /**
+     * One feed per user, all with the same params - a group, as the poller will hand them
+     * over. Past their first poll, so items are announced one by one.
+     */
     private List<Feed> group(String area, User... members) {
+        return group(area, OffsetDateTime.now().minusDays(1), members);
+    }
+
+    /** As {@link #group}, but just subscribed: the next poll is their first. */
+    private List<Feed> freshGroup(String area, User... members) {
+        return group(area, null, members);
+    }
+
+    private List<Feed> group(String area, OffsetDateTime baselinedAt, User... members) {
         Map<String, String> params = new HashMap<>();
         params.put("area", area + "-" + id);
         return Arrays.stream(members).map(u -> {
@@ -298,8 +406,22 @@ class ChangeDetectorTest extends AbstractPostgresTest {
             f.setUserId(u.getId());
             f.setSourceType(SourceType.TICKETMASTER);
             f.setParams(new HashMap<>(params));
+            f.setBaselinedAt(baselinedAt);
             return feeds.save(f);
         }).toList();
+    }
+
+    private Event concert(String externalId, String price, OffsetDateTime startsAt) {
+        return new Event(SourceType.TICKETMASTER, externalId, "Show " + externalId, startsAt, null, null,
+                new BigDecimal(price), "https://example.com/" + externalId, null);
+    }
+
+    private OffsetDateTime baselinedAt(Feed f) {
+        return jdbc.queryForObject("SELECT baselined_at FROM feeds WHERE id = ?", OffsetDateTime.class, f.getId());
+    }
+
+    private int linksOf(Feed f) {
+        return jdbc.queryForObject("SELECT count(*) FROM feed_events WHERE feed_id = ?", Integer.class, f.getId());
     }
 
     private List<String> keysFor(User u) {

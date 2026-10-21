@@ -1,5 +1,6 @@
 package com.david.notification_hub.source;
 
+import com.david.notification_hub.source.ratelimit.RateLimitExceededException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -17,16 +18,19 @@ public class SourceException extends RuntimeException {
     private final SourceType source;
     private final Integer status;
     private final Duration retryAfter;
+    private final boolean throttled;
 
     public SourceException(SourceType source, String message) {
-        this(source, message, null, null, null);
+        this(source, message, null, null, null, false);
     }
 
-    private SourceException(SourceType source, String message, Integer status, Duration retryAfter, Throwable cause) {
+    private SourceException(SourceType source, String message, Integer status, Duration retryAfter,
+                            Throwable cause, boolean throttled) {
         super(source + ": " + message, cause);
         this.source = source;
         this.status = status;
         this.retryAfter = retryAfter;
+        this.throttled = throttled;
     }
 
     /**
@@ -44,21 +48,31 @@ public class SourceException extends RuntimeException {
             String body = redact(r.getResponseBodyAsString(), secrets);
             if (body.length() > MAX_BODY) body = body.substring(0, MAX_BODY) + "…";
             return new SourceException(source, "HTTP " + code + ": " + body,
-                    code, retryAfter(r.getResponseHeaders()), null);
+                    code, retryAfter(r.getResponseHeaders()), null, false);
         }
 
         // Keep what actually went wrong underneath - a timeout, a refused connection - but
         // not e itself, whose message names the request
         Throwable cause = e.getMostSpecificCause();
+        if (cause instanceof RateLimitExceededException limited) {
+            return new SourceException(source, limited.getMessage(), null, limited.getRetryAfter(), null, true);
+        }
         if (cause == e) {
-            return new SourceException(source, "request failed: " + e.getClass().getSimpleName(), null, null, null);
+            return new SourceException(source, "request failed: " + e.getClass().getSimpleName(),
+                    null, null, null, false);
         }
         String detail = cause.getMessage() == null ? "" : ": " + redact(cause.getMessage(), secrets);
         return new SourceException(source, "request failed: " + cause.getClass().getSimpleName() + detail,
-                null, null, cause);
+                null, null, cause, false);
     }
 
     public SourceType getSource() { return source; }
+
+    /**
+     * True when no request was made at all because our own rate limit held it back. Not
+     * the API's failure, so the poller defers instead of backing off.
+     */
+    public boolean isThrottled() { return throttled; }
 
     /** The HTTP status, or null when no response came back at all. */
     public Integer getStatus() { return status; }

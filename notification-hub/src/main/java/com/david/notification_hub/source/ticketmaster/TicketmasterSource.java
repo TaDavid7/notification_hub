@@ -48,6 +48,9 @@ public class TicketmasterSource implements Source {
     public static final String RADIUS = "radius";
     public static final String SEGMENT = "segment";
     public static final String CLASSIFICATION = "classification";
+    // The zip the coordinates came from. Not searched by - kept so a feed can be shown
+    // to its owner as "near 94110" rather than as coordinates.
+    public static final String ZIP = "zip";
 
     // The API refuses to page past this many results, whatever the page size
     static final int DEEP_PAGING_LIMIT = 1000;

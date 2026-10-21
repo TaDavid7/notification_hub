@@ -19,6 +19,13 @@ spring:
       # build their own clients and are unaffected.
       connect-timeout: 5s
       read-timeout: 20s
+  task:
+    scheduling:
+      pool:
+        # One thread each for the dispatcher, reaper, reminder job and poller. With
+        # Spring's default of one they take turns, and a slow poll pass would hold up
+        # message delivery.
+        size: 4
 
 management:
   endpoints:
@@ -61,6 +68,26 @@ alerts:
     initialDelayMs: 60000
     startingSoonHours: 24      # remind this long before an event starts
     onSaleSoonMinutes: 60      # and this long before tickets go on sale
+
+polling:
+  delayMs: 60000             # look for due groups every minute
+  initialDelayMs: 30000
+  batchSize: 10              # groups polled per pass
+  leaseSeconds: 600          # a claimed group is left alone this long; a crash mid-poll is retried after it
+  baseBackoffSeconds: 300    # after a failed poll: about 5m, 10m, 20m... (jittered)
+  maxBackoffSeconds: 21600   # capped at 6h
+  defaultIntervalMinutes: 60
+  intervalMinutes:           # how often each distinct query is polled, per source
+    TICKETMASTER: 60
+    CHEAPSHARK: 60
+  rateLimits:                # per API host; 0 means no limit of that kind
+    # Bracketed, or Spring reads the dots in the host as nesting and the limit never applies
+    "[app.ticketmaster.com]":
+      perSecond: 4           # Ticketmaster allows 5
+      perDay: 4500           # of 5000, leaving headroom
+    "[www.cheapshark.com]":
+      perSecond: 1           # no published limit; stay gentle
+      perDay: 0
 
 ticketmaster:
   apiKey: ${TICKETMASTER_API_KEY:}
