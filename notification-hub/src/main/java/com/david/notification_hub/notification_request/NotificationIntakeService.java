@@ -32,21 +32,34 @@ public class NotificationIntakeService {
 
     /**
      * @param request   the stored row, whether freshly created or the pre-existing one
-     * @param duplicate true when this (source, id, channel) was already enqueued
+     * @param duplicate true when this (source, id, channel, user) was already enqueued
      */
     public record Result(NotificationRequest request, boolean duplicate) {}
 
-    /**
-     * Deliberately not {@code @Transactional}. The duplicate path relies on the unique
-     * index throwing, and a rolled-back transaction cannot then be used to read the
-     * existing row - the lookup has to happen in a fresh one.
-     */
+    /** Enqueues a notification for no particular user - the REST API's path. */
     public Result enqueue(String title,
                           String body,
                           String priority,
                           String channel,
                           String externalSource,
                           String externalId) {
+        return enqueue(title, body, priority, channel, externalSource, externalId, null);
+    }
+
+    /**
+     * Deliberately not {@code @Transactional}. The duplicate path relies on the unique
+     * index throwing, and a rolled-back transaction cannot then be used to read the
+     * existing row - the lookup has to happen in a fresh one.
+     *
+     * @param userId the subscriber this is for, or null when there is none
+     */
+    public Result enqueue(String title,
+                          String body,
+                          String priority,
+                          String channel,
+                          String externalSource,
+                          String externalId,
+                          Long userId) {
 
         String ch   = blankTo(channel, "DISCORD").toUpperCase(Locale.ROOT);
         String prio = blankTo(priority, "NORMAL").toUpperCase(Locale.ROOT);
@@ -59,6 +72,7 @@ public class NotificationIntakeService {
         r.setStatus(NotificationStatus.QUEUED);
         r.setExternalSource(externalSource);
         r.setExternalId(externalId);
+        r.setUserId(userId);
         // Due immediately; the dispatcher's next pass will claim it.
         r.setNextAttemptAt(OffsetDateTime.now());
 
@@ -66,18 +80,18 @@ public class NotificationIntakeService {
             return new Result(repo.saveAndFlush(r), false);
         } catch (DataIntegrityViolationException dup) {
             // Unique index hit -> this source item was already enqueued for this
-            // channel. Idempotent success: hand back the row that won.
+            // channel and user. Idempotent success: hand back the row that won.
             Optional<NotificationRequest> existing =
-                    repo.findByExternalSourceAndExternalIdAndChannel(externalSource, externalId, ch);
+                    repo.findByExternalSourceAndExternalIdAndChannelAndUserId(externalSource, externalId, ch, userId);
 
             if (existing.isPresent()) {
                 return new Result(existing.get(), true);
             }
 
-            // Constraint fired but the row isn't there - not the idempotency case,
-            // so don't swallow it.
-            log.error("Duplicate key on ({}, {}, {}) but no existing row found",
-                    externalSource, externalId, ch, dup);
+            // Constraint fired but the row isn't there - not the idempotency case (an
+            // unknown user_id fails its foreign key the same way), so don't swallow it.
+            log.error("Integrity violation on ({}, {}, {}, {}) but no existing row found",
+                    externalSource, externalId, ch, userId, dup);
             throw dup;
         }
     }

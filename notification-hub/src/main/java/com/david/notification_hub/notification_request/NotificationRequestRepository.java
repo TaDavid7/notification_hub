@@ -9,7 +9,13 @@ import java.util.List;
 import java.util.Optional;
 
 public interface NotificationRequestRepository extends JpaRepository<NotificationRequest, Long> {
-    Optional<NotificationRequest> findByExternalSourceAndExternalIdAndChannel(String externalSource, String externalId, String channel);
+    /**
+     * The row holding a given dedupe key. A null {@code userId} matches rows with no
+     * user, since Spring Data derives {@code user_id IS NULL} for a null argument -
+     * which is what the REST API's duplicate handling needs.
+     */
+    Optional<NotificationRequest> findByExternalSourceAndExternalIdAndChannelAndUserId(
+            String externalSource, String externalId, String channel, Long userId);
 
     /**
      * Claims a batch of due outbox rows.
