@@ -5,8 +5,8 @@ Java 17
 Jar
 Spring Boot 3.5.5
 Group  com.david
-Artifact notification-hub
-Package name com.david.notification_hub
+Artifact notification-hub (now pingr)
+Package name com.david.notification_hub (now com.david.pingr)
 
 **Dependencies**
 spring-boot-starter-web: HTTP API. Built in web server (Tomcat), auto converts between JSON and Java
@@ -21,7 +21,7 @@ testcontainers (junit-jupiter + postgresql) - spins up a real postgres:15 in tes
 junit-platform-launcher - lets gradle run
 
 **Run (local)**
-Start Docker Desktop, then from `notification-hub/`:
+Start Docker Desktop, then from `pingr/`:
 
 ```powershell
 docker compose up --build
@@ -113,12 +113,13 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
    **Manual push** (fallback if Actions is down):
 
    ```powershell
+   # .../pingr once the ECR repo has been created - see "Renamed to Pingr" below
    $repo = "906048429586.dkr.ecr.us-east-1.amazonaws.com/notification-hub"
    $token = & $aws ecr get-login-password --region us-east-1
    docker login --username AWS --password $token 906048429586.dkr.ecr.us-east-1.amazonaws.com
-   cd notification-hub
-   docker build -t notification-hub:latest .
-   docker tag notification-hub:latest "${repo}:latest"
+   cd pingr
+   docker build -t pingr:latest .
+   docker tag pingr:latest "${repo}:latest"
    docker push "${repo}:latest"    # App Runner auto-redeploys
    ```
 
@@ -136,6 +137,54 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
    Also needed before scaling: move Flyway out of app startup into a one-off task.
 
 **Done since the deploy**
+
+- ~~**Renamed to Pingr.**~~ Packages are `com.david.pingr`, the project directory is
+  `pingr/`, the app and Gradle project are `pingr`, and CI pushes to an ECR repo named
+  `pingr`. The **database keeps its name** (`notification_hub`), and docker-compose pins the
+  local volume to `notification-hub_pgdata`, so existing data carries over. AWS resources
+  above still have their old names - they are real and nothing below renames them.
+
+  Still to do by hand, in this order:
+
+  *Before merging the rename* - otherwise the push job fails (tests are unaffected):
+  1. **ECR**: repositories can't be renamed. Create the new one:
+     `aws ecr create-repository --repository-name pingr --region us-east-1`
+  2. **IAM**: the inline policy `ECRPushNotificationHub` on `GitHubActionsECRPushRole` is
+     scoped to the old repo. Allow `arn:aws:ecr:us-east-1:906048429586:repository/pingr`.
+  3. **App Runner**: point the service's image at `.../pingr:latest` (resume it first -
+     `update-service` is refused while PAUSED), and check `AppRunnerECRAccessRole` can
+     pull from the new repo. The service itself can't be renamed; a service called
+     `pingr` would be a new one.
+
+  *If you rename the GitHub repo* (`TaDavid7/notification_hub`):
+  4. **OIDC trust policy** on `GitHubActionsECRPushRole`: change the subject to
+     `repo:TaDavid7/<new name>:ref:refs/heads/main`. GitHub redirects the old URLs, but the
+     token carries the new name, so the push job can't assume the role until this changes.
+  5. The clone URL in the README, and your local remote (`git remote set-url origin ...`).
+
+  *Discord and Slack* - names people see:
+  6. The Discord application and its bot user (developer portal -> General Information,
+     and Bot): name and avatar.
+  7. The Discord webhook (channel settings -> Integrations -> Webhooks): its name is the
+     sender shown on every alert.
+  8. The Slack app, if you keep Slack.
+
+  *Optional* - nothing depends on these names:
+  9. RDS instance `notification-hub-db` (`modify-db-instance --new-db-instance-identifier`)
+     changes its endpoint, so `DB_URL` in App Runner too. The database name stays.
+  10. SSM parameters `/notification-hub/*` and the `ReadNotificationHubSecrets` policy.
+
+  *Local*:
+  11. Delete the old `notification-hub/` folder. It holds only `build/` and `.gradle/`,
+      which IntelliJ had open during the rename.
+  12. Reopen or re-import the Gradle project in IntelliJ from `pingr/`.
+
+- ~~**Pingr: sources, change detection, slash commands, polling.**~~ Feeds (`V8`),
+  Ticketmaster and CheapShark sources behind a `Source` interface, change detection by
+  content hash with alerts written in the same transaction (`V9`, `V10`), reminders,
+  Discord slash commands on `/discord/interactions`, and polling grouped by identical
+  query with leases, backoff and per-host rate limits (`V11`). See the README's "How it
+  works".
 
 - ~~**Remove Canvas.**~~ First step of the Pingr rework. `CanvasPoller`, its config and
   env vars, and `spring-boot-starter-webflux` (only the poller used `WebClient`) are gone.
@@ -228,12 +277,12 @@ Kafka and Kubernetes are dropped. AWS first, Redis second.
 
 - **NAT Gateway.** See the known tradeoff above - RDS stays publicly reachable until this
   holds data worth protecting.
-- **JWT security**, event-driven notifications, and per-channel message formatting, all
-  from the README's future-improvements list. Nothing above blocks them.
+- **JWT security** for the REST API, from the README's future-improvements list. Nothing
+  above blocks it.
 
 Examples
 
-cd "C:\Users\dtani\Documents\2026 Projects\notificationhub\notification_hub\notification-hub"
+cd "C:\Users\dtani\Documents\2026 Projects\notificationhub\notification_hub\pingr"
 docker compose up --build
 
 check http://localhost:8080/actuator/health

@@ -22,13 +22,13 @@ jobs:
 
       - name: Verify Gradle wrapper exists
         run: |
-          test -f notification-hub/gradlew || (echo "Missing Gradle wrapper in notification-hub/. Run 'gradle wrapper' locally and commit it." && exit 1)
+          test -f pingr/gradlew || (echo "Missing Gradle wrapper in pingr/. Run 'gradle wrapper' locally and commit it." && exit 1)
 
       - name: Make gradlew executable
-        run: chmod +x notification-hub/gradlew
+        run: chmod +x pingr/gradlew
 
       - name: Tests + coverage gate
-        working-directory: notification-hub
+        working-directory: pingr
         run: ./gradlew clean test jacocoTestReport jacocoTestCoverageVerification --no-daemon
 
       - name: Upload test & coverage reports
@@ -37,8 +37,8 @@ jobs:
         with:
           name: test-and-coverage-reports
           path: |
-            notification-hub/build/reports/tests/test/**
-            notification-hub/build/reports/jacoco/test/html/**
+            pingr/build/reports/tests/test/**
+            pingr/build/reports/jacoco/test/html/**
 
   push-image:
     name: Build & Push to ECR
@@ -54,7 +54,9 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      ECR_REPOSITORY: notification-hub
+      # Must exist in ECR, and the push role's policy must allow it - see "Renamed to
+      # Pingr" in plan.md. Until then this job fails at the push; tests are unaffected.
+      ECR_REPOSITORY: pingr
 
     steps:
       - name: Checkout
@@ -71,7 +73,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build & push image
-        working-directory: notification-hub
+        working-directory: pingr
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |

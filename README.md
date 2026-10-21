@@ -1,7 +1,24 @@
-# Notification Hub
+# Pingr
 
-A backend notification delivery system built with **Spring Boot**, **PostgreSQL** with flyway migrations
-It routes notifications to multiple channels while carefully logging each request
+A Discord bot that tells you about concerts near you and game deals under your price.
+Subscribe with a slash command; Pingr polls Ticketmaster and CheapShark, notices what's
+new or changed, and mentions you in Discord.
+
+```
+/subscribe concerts zip:94110 radius:25 genre:Rock
+/watch game:Hades under:20
+/list
+/unsubscribe id:12
+```
+
+You hear about:
+
+- **new** shows or deals matching a subscription. The first poll after subscribing sends
+  one summary of what's already out there, rather than an alert per item;
+- **changes** to ones you follow: a price drop, a new date or venue, a cancellation;
+- shows **starting soon** (within a day) and tickets going **on sale soon** (within an hour).
+
+Built with **Spring Boot**, **PostgreSQL** and Flyway migrations.
 
 ---
 
@@ -13,13 +30,15 @@ It routes notifications to multiple channels while carefully logging each reques
 ### Clone
 ```bash
 git clone https://github.com/TaDavid7/notification_hub.git
-cd notification_hub/notification-hub
+cd notification_hub/pingr
 ```
 
 ### Webhook URLs
 
 #### Discord
-For discord create a server, or one that you have permissions and create a webhook integration. You can do this by going into your channel settings and click on new webhook. You can specify what the name is and channel after clicking the webhook you made. Then copy the webhook URL.
+Alerts are posted through a Discord webhook. In a server you have permissions on, open the
+channel's settings -> Integrations -> Webhooks -> New Webhook, choose the channel, and copy
+the webhook URL. Naming the webhook "Pingr" is what members will see as the sender.
 
 #### Slack
 For slack create a workspace, or one that you have permissions and create an app by clicking add apps on the left, and then browse apps. There should be able to click on Build, where you can create an app and then in the incoming WebHooks section create a new WebHook and copy the URL.
@@ -70,33 +89,11 @@ docker compose up --build
 This starts PostgreSQL and the app together. Compose waits for the database to pass its
 health check before booting the app, and Flyway applies the migrations on startup.
 
+- Discord interactions: http://localhost:8080/discord/interactions (behind your tunnel)
 - API: http://localhost:8080/api/notifications
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Health: http://localhost:8080/actuator/health
 - Postgres (from the host): `localhost:5442`
-
-### How delivery works
-
-Posting a notification does not send it. `POST /api/notifications` writes a row and
-returns **202 Accepted**; a background dispatcher picks it up within a few seconds,
-calls the Discord or Slack webhook, and writes the result back. This keeps a slow or
-failing webhook off the request thread and out of the database transaction.
-
-Poll `GET /api/notifications/{id}` for the outcome:
-
-| status | meaning |
-| --- | --- |
-| `QUEUED` | accepted, not yet attempted |
-| `SENDING` | a dispatcher is sending it right now |
-| `SENT` | the provider accepted it |
-| `RETRY` | last attempt failed; `nextAttemptAt` says when the next one is due |
-| `DEAD` | gave up after 5 attempts; `lastError` says why |
-
-Failed sends retry with exponential backoff (30s, doubling, capped at an hour, with
-jitter). Re-posting the same `externalSource` + `externalId` + `channel` returns
-**200** with the existing row instead of creating a duplicate. Every attempt leaves a
-row in `delivery_logs`. Timings are configurable under `notifications.*` in
-`application.yml`.
 
 To stop, `Ctrl+C` then `docker compose down`. Add `-v` to also wipe the database volume.
 
@@ -112,6 +109,53 @@ docker compose up -d postgres
 The defaults in `application.yml` already target `localhost:5442`, so no extra config is
 needed. Webhook URLs come from environment variables in this mode, not the `.env` file.
 
+---
+
+## How it works
+
+```
+/subscribe ─► feeds ─► poller ─► source (Ticketmaster, CheapShark) ─► change detection ─► outbox ─► Discord
+                         ▲                                                  │
+                    poll_groups                                  events, feed_events
+```
+
+- **Feeds and groups.** Each subscription is a feed: a source and its query params.
+  Feeds asking the same thing form one poll group, so ten people watching the same area
+  cost one API call.
+- **Polling.** Every minute the poller claims due groups (`FOR UPDATE SKIP LOCKED`, so it
+  is safe on several instances), fetches each once, and reschedules it for an hour later.
+  A failing group backs off exponentially and respects the API's `Retry-After`. Requests
+  are held to each API's rate limits (`polling.rateLimits` in `application.yml`).
+- **Sources** only fetch and normalise. Adding one is a `SourceType` value and one
+  `@Component` implementing `Source`.
+- **Change detection** keeps the last state of every item with a content hash over its
+  dates, venue, price and status. A new item, or a different hash, becomes an alert in the
+  same transaction that records it, so an alert is never lost and never sent twice.
+- **Reminders** come from a job that scans for events starting, or going on sale, soon.
+
+### How delivery works
+
+Nothing is sent inline. Every alert - and every `POST /api/notifications` - writes a row
+to the outbox; a background dispatcher picks it up within a few seconds, calls the
+Discord or Slack webhook, and writes the result back. This keeps a slow or failing
+webhook off the request thread and out of the database transaction.
+`POST /api/notifications` therefore returns **202 Accepted**; poll
+`GET /api/notifications/{id}` for the outcome:
+
+| status | meaning |
+| --- | --- |
+| `QUEUED` | accepted, not yet attempted |
+| `SENDING` | a dispatcher is sending it right now |
+| `SENT` | the provider accepted it |
+| `RETRY` | last attempt failed; `nextAttemptAt` says when the next one is due |
+| `DEAD` | gave up after 5 attempts; `lastError` says why |
+
+Failed sends retry with exponential backoff (30s, doubling, capped at an hour, with
+jitter). Re-posting the same `externalSource` + `externalId` + `channel` returns
+**200** with the existing row instead of creating a duplicate. Every attempt leaves a
+row in `delivery_logs`. Timings are configurable under `notifications.*` in
+`application.yml`.
+
 ### Tests
 
 ```bash
@@ -121,13 +165,15 @@ needed. Webhook URLs come from environment variables in this mode, not the `.env
 Integration tests run against a real PostgreSQL container via Testcontainers, so
 **Docker must be running** — the same `postgres:15` image compose uses. Migrations are
 applied by Flyway and the schema is validated against the JPA entities, so a passing
-suite means the migrations and the entities actually agree.
+suite means the migrations and the entities actually agree. The external APIs and
+Discord are played by stubs; no test needs a key or the network.
 
 ---
 ## Future improvements
-- JWT security
-- Add an event driven notification (automatic)
-- Add customization for kind of message for event pipeline
+- Alert when a deal that ended comes back
+- Per-user webhooks (`users.webhook_url` is in place; the dispatcher doesn't read it yet)
+- A rate limit shared between instances (Redis), for running more than one
+- JWT security for the REST API
 
 ---
 
@@ -138,4 +184,3 @@ Made by David T.
 
 ## License 
 Licensed under the Apache License 2.0 – see the [LICENSE](LICENSE) file for details.
-
