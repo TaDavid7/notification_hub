@@ -1,0 +1,63 @@
+[
+  {
+    "internalName": "HADES",
+    "title": "Hades",
+    "metacriticLink": "/game/pc/hades/",
+    "dealID": "gogHades%3D",
+    "storeID": "7",
+    "gameID": "200",
+    "salePrice": "9.99",
+    "normalPrice": "24.99",
+    "isOnSale": "1",
+    "savings": "60.024010",
+    "metacriticScore": "93",
+    "steamRatingText": "Overwhelmingly Positive",
+    "steamRatingPercent": "98",
+    "steamRatingCount": "250000",
+    "steamAppID": "1145360",
+    "releaseDate": 1600300800,
+    "lastChange": 1760000000,
+    "dealRating": "9.6",
+    "thumb": "https://example.com/hades.jpg"
+  },
+  {
+    "internalName": "HADES",
+    "title": "Hades",
+    "dealID": "steamHades%3D",
+    "storeID": "1",
+    "gameID": "200",
+    "salePrice": "12.49",
+    "normalPrice": "24.99",
+    "isOnSale": "1"
+  },
+  {
+    "internalName": "HADESII",
+    "title": "Hades II",
+    "dealID": "epicHades2%3D",
+    "storeID": "25",
+    "gameID": "300",
+    "salePrice": "19.99",
+    "normalPrice": "29.99",
+    "isOnSale": "1"
+  },
+  {
+    "internalName": "HADESII",
+    "title": "Hades II",
+    "dealID": "steamHades2%3D",
+    "storeID": "1",
+    "gameID": "300",
+    "salePrice": "19.99",
+    "normalPrice": "29.99",
+    "isOnSale": "1"
+  },
+  {
+    "internalName": "HADESFANGAME",
+    "title": "Hades Fan Game",
+    "dealID": "noGame%3D",
+    "storeID": "1",
+    "gameID": "",
+    "salePrice": "1.99",
+    "normalPrice": "4.99",
+    "isOnSale": "1"
+  }
+]

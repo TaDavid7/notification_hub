@@ -1,0 +1,79 @@
+{
+  "_embedded": {
+    "events": [
+      {
+        "name": "Band Live",
+        "type": "event",
+        "id": "vvG1zZ9onsale",
+        "url": "https://www.ticketmaster.com/event/vvG1zZ9onsale",
+        "sales": {
+          "public": {
+            "startDateTime": "2026-11-01T17:00:00Z",
+            "startTBD": false,
+            "startTBA": false,
+            "endDateTime": "2027-01-01T04:00:00Z"
+          }
+        },
+        "dates": {
+          "start": {
+            "localDate": "2026-12-31",
+            "localTime": "20:00:00",
+            "dateTime": "2027-01-01T04:00:00Z",
+            "dateTBD": false,
+            "dateTBA": false,
+            "timeTBA": false,
+            "noSpecificTime": false
+          },
+          "timezone": "America/Los_Angeles",
+          "status": { "code": "onsale" }
+        },
+        "priceRanges": [
+          { "type": "standard including fees", "currency": "USD", "min": 55.75, "max": 120.0 },
+          { "type": "standard", "currency": "USD", "min": 49.5, "max": 99.0 }
+        ],
+        "_embedded": {
+          "venues": [
+            {
+              "name": "The Fillmore",
+              "city": { "name": "San Francisco" },
+              "state": { "stateCode": "CA" }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Cancelled Show",
+        "type": "event",
+        "id": "vvG1zZ9canceled",
+        "url": "https://www.ticketmaster.com/event/vvG1zZ9canceled",
+        "dates": {
+          "start": { "localDate": "2026-12-05", "dateTime": "2026-12-06T03:30:00Z" },
+          "status": { "code": "canceled" }
+        },
+        "_embedded": {
+          "venues": [ { "name": "The Warfield", "city": { "name": "San Francisco" } } ]
+        }
+      },
+      {
+        "name": "Date TBA Show",
+        "type": "event",
+        "id": "vvG1zZ9tba",
+        "url": "https://www.ticketmaster.com/event/vvG1zZ9tba",
+        "sales": {
+          "public": { "startTBD": true, "startTBA": false }
+        },
+        "dates": {
+          "start": { "dateTBD": false, "dateTBA": true, "timeTBA": true, "noSpecificTime": false },
+          "status": { "code": "offsale" }
+        }
+      },
+      {
+        "name": "Event With No Id",
+        "type": "event",
+        "url": "https://www.ticketmaster.com/event/unknown",
+        "dates": { "status": { "code": "onsale" } }
+      }
+    ]
+  },
+  "page": { "size": 200, "totalElements": 4, "totalPages": 1, "number": 0 }
+}

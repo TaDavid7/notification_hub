@@ -4,6 +4,7 @@ import com.david.notification_hub.event.StoredEvent;
 import com.david.notification_hub.event.StoredEventRepository;
 import com.david.notification_hub.feed.Feed;
 import com.david.notification_hub.feed.FeedRepository;
+import com.david.notification_hub.source.EventStatus;
 import com.david.notification_hub.source.SourceType;
 import com.david.notification_hub.support.AbstractPostgresTest;
 import com.david.notification_hub.user.User;
@@ -70,10 +71,12 @@ class PingrSchemaTest extends AbstractPostgresTest {
         e.setVenue("The Fillmore");
         e.setPrice(new BigDecimal("49.50"));
         e.setUrl("https://example.com/e/1");
+        e.setStatus(EventStatus.CANCELED);
         long id = events.saveAndFlush(e).getId();
 
         StoredEvent back = events.findById(id).orElseThrow();
         assertEquals(SourceType.TICKETMASTER, back.getSource());
+        assertEquals(EventStatus.CANCELED, back.getStatus());
         assertTrue(startsAt.isEqual(back.getStartsAt()));
         assertNull(back.getOnSaleAt(), "a source with no on-sale date leaves it null");
         assertEquals("The Fillmore", back.getVenue());

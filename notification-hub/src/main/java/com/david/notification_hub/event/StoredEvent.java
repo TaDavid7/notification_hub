@@ -1,5 +1,6 @@
 package com.david.notification_hub.event;
 
+import com.david.notification_hub.source.EventStatus;
 import com.david.notification_hub.source.SourceType;
 import jakarta.persistence.*;
 
@@ -46,6 +47,10 @@ public class StoredEvent {
 
     @Column(name = "url")
     private String url;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private EventStatus status = EventStatus.SCHEDULED;
 
     @Column(name = "content_hash", nullable = false)
     private String contentHash;
@@ -97,6 +102,9 @@ public class StoredEvent {
 
     public String getUrl() { return url; }
     public void setUrl(String url) { this.url = url; }
+
+    public EventStatus getStatus() { return status; }
+    public void setStatus(EventStatus status) { this.status = status; }
 
     public String getContentHash() { return contentHash; }
     public void setContentHash(String contentHash) { this.contentHash = contentHash; }

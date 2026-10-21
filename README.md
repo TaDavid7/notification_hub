@@ -31,6 +31,10 @@ file is gitignored, so your secrets never get committed:
 ```ini
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+
+# Optional - enables concert and event alerts. Create an app at
+# developer.ticketmaster.com and use its Consumer Key. Game deals need no key.
+TICKETMASTER_API_KEY=...
 ```
 
 ### Run

@@ -22,6 +22,7 @@ import java.util.Objects;
  * @param venue      null when not applicable
  * @param price      rounded to cents, the precision events.price stores
  * @param url        where to send the user
+ * @param status     whether it is still going ahead; null is taken as SCHEDULED
  */
 public record Event(
         SourceType source,
@@ -31,7 +32,8 @@ public record Event(
         OffsetDateTime onSaleAt,
         String venue,
         BigDecimal price,
-        String url) {
+        String url,
+        EventStatus status) {
 
     public Event {
         Objects.requireNonNull(source, "source");
@@ -42,12 +44,15 @@ public record Event(
         // Rounded here, not just by the column, so the hash covers exactly the price that
         // gets stored: 49.5 and 49.50 are one price, and a sub-cent wobble is no change.
         price = price == null ? null : price.setScale(2, RoundingMode.HALF_UP);
+        status = status == null ? EventStatus.SCHEDULED : status;
     }
 
     /**
      * A fingerprint of what a subscriber would want to hear has changed: the dates, the
-     * venue and the price. Title and url are left out because sources retitle and re-link
-     * items without anything real changing, and each of those would be an alert.
+     * venue, the price and the status. The status is the only sign of a cancellation,
+     * which can leave every other field as it was. Title and url are left out because
+     * sources retitle and re-link items without anything real changing, and each of those
+     * would be an alert.
      *
      * Changing what goes in here changes every hash, so the first poll afterwards would
      * report every known event as updated.
@@ -59,6 +64,7 @@ public record Event(
         field(sb, onSaleAt == null ? null : onSaleAt.toInstant());
         field(sb, venue);
         field(sb, price == null ? null : price.toPlainString());
+        field(sb, status.name());
 
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")

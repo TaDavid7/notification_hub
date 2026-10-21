@@ -13,6 +13,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  http:
+    client:
+      # Applies to the RestClient the sources poll with. The Discord and Slack senders
+      # build their own clients and are unaffected.
+      connect-timeout: 5s
+      read-timeout: 20s
 
 management:
   endpoints:
@@ -40,3 +46,12 @@ notifications:
   reaper:
     delayMs: 60000
     initialDelayMs: 60000
+
+ticketmaster:
+  apiKey: ${TICKETMASTER_API_KEY:}
+  baseUrl: https://app.ticketmaster.com/discovery/v2
+  pageSize: 200              # the API's largest page
+  maxPages: 5                # 5 x 200 = 1000, as deep as the API pages
+
+cheapshark:
+  baseUrl: https://www.cheapshark.com/api/1.0
