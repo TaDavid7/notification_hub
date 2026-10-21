@@ -2,4 +2,10 @@ package com.david.notification_hub.user;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface UserRepository extends JpaRepository<User, Long> {}
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    /** @param externalId the Discord user id */
+    Optional<User> findByExternalId(String externalId);
+}

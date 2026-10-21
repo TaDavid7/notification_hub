@@ -24,6 +24,23 @@ For discord create a server, or one that you have permissions and create a webho
 #### Slack
 For slack create a workspace, or one that you have permissions and create an app by clicking add apps on the left, and then browse apps. There should be able to click on Build, where you can create an app and then in the incoming WebHooks section create a new WebHook and copy the URL.
 
+#### Discord slash commands
+Subscriptions are made with slash commands (`/subscribe concerts`, `/watch`, `/list`,
+`/unsubscribe`), which need a Discord application:
+
+1. At https://discord.com/developers/applications, create an application. From its
+   **General Information** page copy the **Application ID** and **Public Key**; from
+   **Bot**, reset and copy the **Token**.
+2. Invite it to your server: **OAuth2 -> URL Generator**, tick `applications.commands`,
+   open the generated URL.
+3. Set **Interactions Endpoint URL** to `https://<your host>/discord/interactions`. Discord
+   only calls public HTTPS URLs, so locally you need a tunnel such as `cloudflared` or
+   `ngrok`. Discord tests the URL when you save it; the app must be running.
+
+The commands are registered each time the app starts. With `DISCORD_GUILD_ID` set they go
+to that one server and appear immediately; without it they are global and can take up to
+an hour to appear.
+
 #### Configure app settings
 Create a `.env` file next to `docker-compose.yml` and put your webhook URLs in it. This
 file is gitignored, so your secrets never get committed:
@@ -31,6 +48,13 @@ file is gitignored, so your secrets never get committed:
 ```ini
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+
+# Slash commands - see above
+DISCORD_APPLICATION_ID=...
+DISCORD_PUBLIC_KEY=...
+DISCORD_BOT_TOKEN=...
+# Optional - your server's id (right-click it with Developer Mode on -> Copy Server ID)
+DISCORD_GUILD_ID=...
 
 # Optional - enables concert and event alerts. Create an app at
 # developer.ticketmaster.com and use its Consumer Key. Game deals need no key.
