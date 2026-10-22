@@ -41,7 +41,7 @@ public class DiscordSender implements Sender {
     }
 
     @Override
-    public SendResult send(String token, String title, String body, boolean isSandbox) {
+    public SendResult send(String token, String title, String body) {
         // Prefer per-call token if provided; otherwise use configured URL
         String baseUrl = (token != null && !token.isBlank()) ? token.trim() : configuredWebhookUrl;
         if (baseUrl == null || baseUrl.isBlank()) {
@@ -52,7 +52,7 @@ public class DiscordSender implements Sender {
         String url = ensureWaitTrue(baseUrl);
 
         // Build a readable content payload within Discord's limits
-        String content = buildContent(title, body, isSandbox);
+        String content = buildContent(title, body);
         String json = "{\"content\":\"" + escapeJson(content) + "\"}";
 
         HttpRequest req = HttpRequest.newBuilder(URI.create(url))
@@ -109,12 +109,11 @@ public class DiscordSender implements Sender {
         return u + "?wait=true";
     }
 
-    private static String buildContent(String title, String body, boolean isSandbox) {
-        String prefix = isSandbox ? "🧪 [SANDBOX]\n" : "";
+    private static String buildContent(String title, String body) {
         String t = (title == null || title.isBlank()) ? "" : ("**" + title.trim() + "**\n");
         String b = (body == null) ? "" : body.trim();
 
-        String combined = prefix + t + b;
+        String combined = t + b;
         if (combined.length() <= MAX_CONTENT) return combined;
 
         // Trim with a clear ellipsis

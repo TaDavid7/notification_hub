@@ -44,8 +44,10 @@ class InteractionControllerTest extends AbstractPostgresTest {
     private static final String TS = "1760000000";
 
     @DynamicPropertySource
-    static void discordKey(DynamicPropertyRegistry registry) {
+    static void keys(DynamicPropertyRegistry registry) {
         registry.add("discord.publicKey", () -> Ed25519TestKeys.rawHex(DISCORD.getPublic()));
+        // Concert subscriptions are refused without one. The poller is parked, so it's never sent.
+        registry.add("ticketmaster.apiKey", () -> "test-key");
     }
 
     @Autowired MockMvc mvc;

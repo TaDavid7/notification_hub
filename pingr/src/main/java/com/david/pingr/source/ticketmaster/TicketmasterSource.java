@@ -85,6 +85,11 @@ public class TicketmasterSource implements Source {
     }
 
     @Override
+    public boolean enabled() {
+        return !apiKey.isEmpty();
+    }
+
+    @Override
     public List<Event> fetch(Feed feed) {
         if (apiKey.isEmpty()) {
             throw new SourceException(type(), "TICKETMASTER_API_KEY is not set");

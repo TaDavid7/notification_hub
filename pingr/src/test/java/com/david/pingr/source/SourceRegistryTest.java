@@ -6,8 +6,10 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.core.NestedExceptionUtils;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -60,6 +62,18 @@ class SourceRegistryTest {
         };
 
         assertThrows(NullPointerException.class, () -> new SourceRegistry(List.of(typeless)));
+    }
+
+    @Test
+    void aDisabledSourceIsFoundButNotPolled() {
+        Source tm = new FakeTicketmaster() {
+            @Override public boolean enabled() { return false; }
+        };
+
+        SourceRegistry registry = new SourceRegistry(List.of(tm, new FakeCheapShark()));
+
+        assertEquals(Set.of(SourceType.CHEAPSHARK), registry.types());
+        assertSame(tm, registry.get(SourceType.TICKETMASTER));
     }
 
     @Test

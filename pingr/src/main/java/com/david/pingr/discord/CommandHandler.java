@@ -4,6 +4,7 @@ import com.david.pingr.alert.Alerts;
 import com.david.pingr.feed.Feed;
 import com.david.pingr.feed.SubscriptionService;
 import com.david.pingr.geo.ZipCodes;
+import com.david.pingr.source.SourceRegistry;
 import com.david.pingr.source.SourceType;
 import com.david.pingr.source.cheapshark.CheapSharkSource;
 import com.david.pingr.source.ticketmaster.TicketmasterSource;
@@ -41,10 +42,12 @@ public class CommandHandler {
 
     private final SubscriptionService subscriptions;
     private final ZipCodes zipCodes;
+    private final SourceRegistry sources;
 
-    public CommandHandler(SubscriptionService subscriptions, ZipCodes zipCodes) {
+    public CommandHandler(SubscriptionService subscriptions, ZipCodes zipCodes, SourceRegistry sources) {
         this.subscriptions = subscriptions;
         this.zipCodes = zipCodes;
+        this.sources = sources;
     }
 
     public String handle(JsonNode interaction) {
@@ -67,6 +70,10 @@ public class CommandHandler {
     private String subscribe(String userId, JsonNode options) {
         JsonNode sub = options.path(0);
         if (!"concerts".equals(sub.path("name").asText())) return "I don't know that kind of subscription.";
+        // Without its API key Ticketmaster is never polled, so the feed would sit silent forever
+        if (!sources.types().contains(SourceType.TICKETMASTER)) {
+            return "Concert alerts aren't available right now. /watch for game deals still works.";
+        }
         Map<String, JsonNode> opts = options(sub.path("options"));
 
         String zip = text(opts, "zip");
