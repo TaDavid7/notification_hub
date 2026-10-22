@@ -21,6 +21,15 @@ public interface Source {
     SourceType type();
 
     /**
+     * False when the source can't fetch anything as configured, such as an API key that
+     * isn't set. Its feeds are then left unpolled rather than failing every poll, and
+     * nobody can subscribe to it.
+     */
+    default boolean enabled() {
+        return true;
+    }
+
+    /**
      * Runs the feed's query against the API.
      *
      * Only {@code feed.getParams()} may affect the result. Feeds with equal params share

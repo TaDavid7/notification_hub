@@ -31,7 +31,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -140,7 +139,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
 
     @Test
     void aRowEnqueuedIfAbsentIsPickedUpLikeAnyOther() {
-        when(router.send(any(), any(), any(), any(), anyBoolean())).thenReturn(SendResult.ok("ok"));
+        when(router.send(any(), any(), any(), any())).thenReturn(SendResult.ok("ok"));
         long alice = newUser();
 
         intake.enqueueIfAbsent("title", "body", "DISCORD", "test:item", "ifabsent-3", alice);
@@ -163,7 +162,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
 
     @Test
     void dispatcherSendsQueuedRowAndMarksItSent() {
-        when(router.send(eq("DISCORD"), any(), any(), any(), anyBoolean()))
+        when(router.send(eq("DISCORD"), any(), any(), any()))
                 .thenReturn(SendResult.ok("Discord OK 204"));
 
         long id = enqueue("ok-1", "DISCORD").getId();
@@ -184,7 +183,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
 
     @Test
     void sentRowIsNotSentAgainOnTheNextPass() {
-        when(router.send(any(), any(), any(), any(), anyBoolean()))
+        when(router.send(any(), any(), any(), any()))
                 .thenReturn(SendResult.ok("ok"));
 
         enqueue("once-1", "DISCORD");
@@ -192,14 +191,14 @@ class OutboxDispatchTest extends AbstractPostgresTest {
         dispatcher.dispatchDue();
 
         verify(router, org.mockito.Mockito.times(1))
-                .send(any(), any(), any(), any(), anyBoolean());
+                .send(any(), any(), any(), any());
     }
 
     // ---------- failure path ----------
 
     @Test
     void failedSendGoesToRetryWithABackoffAndKeepsTheError() {
-        when(router.send(any(), any(), any(), any(), anyBoolean()))
+        when(router.send(any(), any(), any(), any()))
                 .thenReturn(SendResult.fail("Discord HTTP 500"));
 
         long id = enqueue("fail-1", "DISCORD").getId();
@@ -219,7 +218,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
 
     @Test
     void aRowThatIsNotYetDueIsSkipped() {
-        when(router.send(any(), any(), any(), any(), anyBoolean()))
+        when(router.send(any(), any(), any(), any()))
                 .thenReturn(SendResult.fail("nope"));
 
         long id = enqueue("later-1", "DISCORD").getId();
@@ -231,7 +230,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
 
     @Test
     void attemptsAreExhaustedIntoDead() {
-        when(router.send(any(), any(), any(), any(), anyBoolean()))
+        when(router.send(any(), any(), any(), any()))
                 .thenReturn(SendResult.fail("still broken"));
 
         long id = enqueue("dead-1", "DISCORD").getId();
@@ -255,7 +254,7 @@ class OutboxDispatchTest extends AbstractPostgresTest {
 
     @Test
     void aSenderThatThrowsIsTreatedAsAFailureNotACrash() {
-        when(router.send(any(), any(), any(), any(), anyBoolean()))
+        when(router.send(any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("boom"));
 
         long id = enqueue("throw-1", "DISCORD").getId();

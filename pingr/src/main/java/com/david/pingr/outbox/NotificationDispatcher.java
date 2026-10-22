@@ -74,7 +74,7 @@ public class NotificationDispatcher {
         SendResult result;
         try {
             // No transaction is open here. This is the whole point of the outbox.
-            result = router.send(req.getChannel(), "", req.getTitle(), req.getBody(), true);
+            result = router.send(req.getChannel(), "", req.getTitle(), req.getBody());
         } catch (Exception ex) {
             // Senders are written to return SendResult.fail rather than throw, but a
             // bug or a RuntimeException must not take the rest of the batch with it.

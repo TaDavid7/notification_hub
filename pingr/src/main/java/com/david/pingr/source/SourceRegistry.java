@@ -24,6 +24,7 @@ public class SourceRegistry {
     private static final Logger log = LoggerFactory.getLogger(SourceRegistry.class);
 
     private final Map<SourceType, Source> byType;
+    private final Set<SourceType> enabled;
 
     /**
      * @param sources every Source bean; Spring passes an empty list when there are none.
@@ -44,20 +45,27 @@ public class SourceRegistry {
         }
         this.byType = Collections.unmodifiableMap(map);
 
-        // Not fatal: a type can exist before its source is written, and its feeds then
-        // just go unpolled. EnumSet.copyOf would throw on an empty key set, hence removeAll.
-        Set<SourceType> missing = EnumSet.allOf(SourceType.class);
-        missing.removeAll(byType.keySet());
+        Set<SourceType> on = EnumSet.noneOf(SourceType.class);
+        for (Source source : map.values()) {
+            if (source.enabled()) on.add(source.type());
+        }
+        this.enabled = Collections.unmodifiableSet(on);
+
+        // Not fatal: a type can exist before its source is written, or have a source with
+        // no API key, and its feeds then just go unpolled. EnumSet.copyOf would throw on an
+        // empty set, hence removeAll.
+        Set<SourceType> unpolled = EnumSet.allOf(SourceType.class);
+        unpolled.removeAll(enabled);
 
         log.info("Sources registered: {}", byType.keySet());
-        if (!missing.isEmpty()) {
-            log.warn("No source registered for {}; feeds of those types will not be polled", missing);
+        if (!unpolled.isEmpty()) {
+            log.warn("No enabled source for {}; feeds of those types will not be polled", unpolled);
         }
     }
 
-    /** The types that have a source - the only ones worth polling. */
+    /** The types that have an enabled source - the only ones worth polling or subscribing to. */
     public Set<SourceType> types() {
-        return byType.keySet();
+        return enabled;
     }
 
     /** @throws IllegalArgumentException if no source serves this type */

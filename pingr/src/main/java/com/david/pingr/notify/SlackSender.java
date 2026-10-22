@@ -19,7 +19,7 @@ public class SlackSender implements Sender {
     private String url;
 
     @Override
-    public SendResult send(String token, String title, String body, boolean isSandbox) {
+    public SendResult send(String token, String title, String body) {
         try {
             String text = (title == null ? "" : title) + " — " + (body == null ? "" : body);
             String json = mapper.writeValueAsString(Map.of("text", text));

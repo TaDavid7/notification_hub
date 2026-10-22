@@ -243,6 +243,13 @@ class TicketmasterSourceTest {
     }
 
     @Test
+    void enabledOnlyWithAKey() {
+        assertTrue(source.enabled());
+        assertFalse(sourceWith("", 200, 5).enabled());
+        assertFalse(sourceWith("  ", 200, 5).enabled());
+    }
+
+    @Test
     void aFeedWithBadParamsIsRejectedBeforeAnyCall() {
         assertThrows(IllegalArgumentException.class, () -> source.fetch(feed(LON, "-122.4", RADIUS, "25")));
         assertThrows(IllegalArgumentException.class,

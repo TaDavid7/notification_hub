@@ -12,7 +12,7 @@ public class SendRouter{
         this.slack = s;
     }
 
-    public SendResult send(String channel, String token, String title, String body, boolean isSandbox){
+    public SendResult send(String channel, String token, String title, String body){
         String ch = channel;
         if(channel == null){
             ch = "DISCORD";
@@ -20,8 +20,8 @@ public class SendRouter{
             ch = channel.toUpperCase();
         }
         return switch (ch){
-            case "DISCORD" -> discord.send(token, title, body, isSandbox);
-            case "SLACK" -> slack.send(token, title, body, isSandbox);
+            case "DISCORD" -> discord.send(token, title, body);
+            case "SLACK" -> slack.send(token, title, body);
             default -> SendResult.fail("Unknown channel: " + channel);
         };
     }
